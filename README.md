@@ -44,7 +44,7 @@ Each day runs from 06:00 to dusk at 20:00. A scavenging run costs hours (the dri
 
 ## Scavenging
 
-- **County map:** scrollable, zoomable, with roads, rivers and 325 settlements. **Timișoara** is a set of about 28 sites (supermarkets, DIY, outdoor shops, pharmacies, warehouses, pharmaceutical depots, car dealerships, a hospital, the police station, an army depot, the university, the airport, the Bega canal). The **Petrom station on the DN69 at km 18+0,8, Cornești** is about 5 km from Cărani, rich in diesel and a natural first outpost. Site positions are approximate.
+- **County map:** scrollable, zoomable, with roads, rivers and 325 settlements. In the 3D version it is a tilted perspective view: the county is a raised slab with a glowing border, roads and rivers are ribbons, every settlement is a building (taller and bolder for towns and Timișoara, tinted by how infested it is) and Cărani has an amber beacon. Middle-drag (or Shift + right-drag, or **[ ]**) turns and tilts the view, **Home** resets it, a compass shows north, and on touch two fingers pinch and twist. **Timișoara** is a set of about 28 sites (supermarkets, DIY, outdoor shops, pharmacies, warehouses, pharmaceutical depots, car dealerships, a hospital, the police station, an army depot, the university, the airport, the Bega canal). The **Petrom station on the DN69 at km 18+0,8, Cornești** is about 5 km from Cărani, rich in diesel and a natural first outpost. Site positions are approximate.
 - **Every site type has its own detailed top-down look** and its own mix of infected. Crates look like what is inside; at night you only see what your torch lights.
 - **Sites remember you:** a looted site is picked over for a while and refills slowly, but it also re-infests the longer you stay away. The briefing shows both.
 - **Objectives** (about half of all sites, shown in the briefing): *rescue* a prisoner and bring them home alive (they join your crew), *clear* every infected to reveal a cache, kill a *mutant* boss for rare gear, find a keycard and open a *vault*, or fetch a *data drive* without the noise meter passing 70. At the Reapers' camp the objective is to kill their leader.
@@ -130,6 +130,7 @@ Needs the radio room.
 | `gl3d.js` | Shared 3D layer: renderer, camera helpers, mouse-ray picking, materials, low-poly people, particles |
 | `gl_mission.js` | 3D scavenging run: the 2D floor becomes the ground texture, walls are boxes, infected and survivors are animated models |
 | `gl_base.js` | 3D base: terrain, a model for every building, vehicles, crew, the raid (attackers, tracers, fires, blasts), day/night light, orbit camera |
+| `gl_map.js` | 3D county map: perspective camera that `map.js` projects through, county slab, road and river ribbons, settlement buildings, home beacon |
 | `geo.js` | Map data: county outline, roads, rivers, settlements (generated) |
 | `data.js` | Towns and sites, loot, vehicles, gear, recipes, crew, base layout, settings tables |
 | `audio.js` | Settings, key bindings, procedural sound effects and music |

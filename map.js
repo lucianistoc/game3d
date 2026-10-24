@@ -6,8 +6,12 @@ const KLON = Math.cos(45.8 * Math.PI / 180), BASEPX = 460;      // px per degree
 const cam = { lon: 21.19, lat: 45.83, z: 2.8 };
 const VIEW_TOP = 36;
 const mscale = () => BASEPX * cam.z;
-const mproj = (lon, lat) => [W / 2 + (lon - cam.lon) * mscale() * KLON, (H + VIEW_TOP) / 2 - (lat - cam.lat) * mscale()];
-const munproj = (x, y) => [cam.lon + (x - W / 2) / (mscale() * KLON), cam.lat - (y - (H + VIEW_TOP) / 2) / mscale()];
+// flat projection; while the 3D map is showing these are redirected to its perspective camera (gl_map.js), so labels, hover and clicks line up
+const mproj2d = (lon, lat) => [W / 2 + (lon - cam.lon) * mscale() * KLON, (H + VIEW_TOP) / 2 - (lat - cam.lat) * mscale()];
+const munproj2d = (x, y) => [cam.lon + (x - W / 2) / (mscale() * KLON), cam.lat - (y - (H + VIEW_TOP) / 2) / mscale()];
+const map3d = () => R3D.ok && R3D.map && R3D.map.active();
+const mproj = (lon, lat) => map3d() ? R3D.map.project(lon, lat) : mproj2d(lon, lat);
+const munproj = (x, y) => map3d() ? R3D.map.unproject(x, y) : munproj2d(x, y);
 const kmBetween = (a, b) => Math.hypot((a.lon - b.lon) * 111 * KLON, (a.lat - b.lat) * 111);
 const kmLL = (a, b) => Math.hypot((a[0] - b[0]) * 111 * KLON, (a[1] - b[1]) * 111);
 
@@ -42,28 +46,42 @@ const NEIGHBOURS = TOWNS.filter(t => t.pop > 500).map(t => ({ t, d: kmBetween(t,
 const hasLocalRoads = typeof LOCAL_ROADS !== 'undefined';
 
 const mapScene = {
-  hover: null, drag: null, labels: [],
-  click() { this.drag = { x: mouse.x, y: mouse.y, lon: cam.lon, lat: cam.lat, moved: false }; },
+  gl3d: true, hover: null, drag: null, rot: null, labels: [],
+  click() {
+    if (map3d() && (mouse.btn === 1 || (mouse.btn === 2 && (keys.ShiftLeft || keys.ShiftRight)))) { this.rot = { x: mouse.x, y: mouse.y, yaw: cam.yaw, pitch: cam.pitch }; return; }   // middle-drag (or shift + right-drag) turns and tilts the 3D view
+    this.drag = { x: mouse.x, y: mouse.y, lon: cam.lon, lat: cam.lat, moved: false, g0: map3d() ? munproj(mouse.x, mouse.y) : null };
+  },
   up() {
     if (this.drag && !this.drag.moved && this.hover && this.hover.name === 'Timișoara') { if (cam.z < 5.5) this.flyTo(this.hover.lon, this.hover.lat, 10); else say('Pick a store, pharmacy, warehouse or dealership'); }
     else if (this.drag && !this.drag.moved && this.hover) { if (save.clock >= DUSK) say('Night has fallen: get back to base'); else go(briefScene(this.hover)); }
-    this.drag = null;
+    this.drag = null; this.rot = null;
   },
   wheel(f, x, y) {
     const [lo, la] = munproj(x, y);
     cam.z = Math.max(1, Math.min(14, cam.z * f));
     const [nx, ny] = mproj(lo, la);                       // keep the point under the cursor fixed
-    cam.lon += (nx - x) / (mscale() * KLON); cam.lat -= (ny - y) / mscale();
+    if (map3d()) { for (let i = 0; i < 3; i++) { const [lo2, la2] = munproj(x, y); cam.lon += lo - lo2; cam.lat += la - la2; } }
+    else { cam.lon += (nx - x) / (mscale() * KLON); cam.lat -= (ny - y) / mscale(); }
   },
   flyTo(lon, lat, z) { cam.lon = lon; cam.lat = lat; cam.z = z; },
   update(dt) {
     if (this.drag && mouse.down) {
       const dx = mouse.x - this.drag.x, dy = mouse.y - this.drag.y;
-      if (this.drag.moved || Math.hypot(dx, dy) > 5) { this.drag.moved = true; cam.lon = this.drag.lon - dx / (mscale() * KLON); cam.lat = this.drag.lat + dy / mscale(); }
+      if (this.drag.moved || Math.hypot(dx, dy) > 5) {
+        this.drag.moved = true;
+        if (this.drag.g0) { for (let i = 0; i < 2; i++) { const [lo, la] = munproj(mouse.x, mouse.y); cam.lon += this.drag.g0[0] - lo; cam.lat += this.drag.g0[1] - la; } }   // 3D: the ground point you grabbed stays under the cursor
+        else { cam.lon = this.drag.lon - dx / (mscale() * KLON); cam.lat = this.drag.lat + dy / mscale(); }
+      }
+    }
+    if (map3d()) {
+      if (this.rot && mouse.down) { cam.yaw = this.rot.yaw - (mouse.x - this.rot.x) * .008; cam.pitch = Math.max(.45, Math.min(1.35, this.rot.pitch + (mouse.y - this.rot.y) * .006)); }
+      if (keys.BracketLeft) cam.yaw -= 1.2 * dt; if (keys.BracketRight) cam.yaw += 1.2 * dt; if (keys.Home) { cam.yaw = 0; cam.pitch = .82; }
+      const pts = [...touchPts.values()];   // touch: pinch zooms, twisting turns the map
+      if (pts.length >= 2) { const [a, b] = pts, d = Math.hypot(a.x - b.x, a.y - b.y) || 1, ang = Math.atan2(b.y - a.y, b.x - a.x); this.drag = null; if (this.pin) { cam.z = Math.max(1, Math.min(14, cam.z * d / this.pin.d)); let da = ang - this.pin.ang; da = Math.atan2(Math.sin(da), Math.cos(da)); cam.yaw -= da; } this.pin = { d, ang }; } else this.pin = null;
     }
     const sp = 380 * dt / mscale();
-    if (kdown('left')) cam.lon -= sp / KLON; if (kdown('right')) cam.lon += sp / KLON;
-    if (kdown('up')) cam.lat += sp; if (kdown('down')) cam.lat -= sp;
+    { const ix = (kdown('right') ? 1 : 0) - (kdown('left') ? 1 : 0), iy = (kdown('up') ? 1 : 0) - (kdown('down') ? 1 : 0), c = map3d() ? Math.cos(cam.yaw) : 1, s = map3d() ? Math.sin(cam.yaw) : 0;
+      cam.lon += (ix * c - iy * s) * sp / KLON; cam.lat += (ix * s + iy * c) * sp; }
     if (keys.Equal || keys.NumpadAdd) this.wheel(1 + 1.2 * dt, W / 2, H / 2);
     if (keys.Minus || keys.NumpadSubtract) this.wheel(1 / (1 + 1.2 * dt), W / 2, H / 2);
     cam.lon = Math.max(20.0, Math.min(22.8, cam.lon)); cam.lat = Math.max(45.0, Math.min(46.35, cam.lat));
@@ -115,8 +133,11 @@ const mapScene = {
   tracePath(pts) { ctx.beginPath(); pts.forEach(([lo, la], i) => { const [x, y] = mproj(lo, la); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); },
   draw(dt, time) {
     this.labels = [];
+    const g3 = map3d();   // 3D: the ground, roads, rivers, border and buildings come from gl_map.js; this code draws the labels and interface on top
+    if (g3) R3D.map.frame(dt, time);
     ctx.save(); ctx.beginPath(); ctx.rect(0, VIEW_TOP, W, H - VIEW_TOP); ctx.clip();
-    ctx.fillStyle = '#050d09'; ctx.fillRect(0, VIEW_TOP, W, H - VIEW_TOP);
+    if (!g3) { ctx.fillStyle = '#050d09'; ctx.fillRect(0, VIEW_TOP, W, H - VIEW_TOP); }
+    if (!g3) {
     // graticule that gets finer as you zoom in
     const steps = [1, .5, .2, .1, .05, .02, .01], px = s => s * mscale(), stp = steps.find((s, i) => px(s) < 140 && (px(s) >= 55 || i === steps.length - 1)) || .01;
     const [lo0, la1] = munproj(0, VIEW_TOP), [lo1, la0] = munproj(W, H);
@@ -157,6 +178,7 @@ const mapScene = {
     this.tracePathDashed(GEO.county, 14, 6, 0, true);
     ctx.strokeStyle = '#d6ffe4'; ctx.lineWidth = 2; ctx.stroke();
 
+    }
     // route Cărani -> Timișoara along the real road (amber), approximate local links (dashed)
     if (cam.z >= 1.2) {
       ctx.strokeStyle = AMBER; ctx.lineWidth = 3; ctx.globalAlpha = .85;
@@ -174,8 +196,8 @@ const mapScene = {
       const [x, y] = mproj(t.lon, t.lat); if (x < -20 || x > W + 20 || y < VIEW_TOP - 20 || y > H + 20) continue;
       if (t.type === 'spot') { this.drawSpot(t, x, y, t === this.hover); drawFx(t, x, y, time); continue; }
       const r = this.size(t) * (cam.z > 6 ? 1.3 : 1), i = inf(t), hv = t === this.hover;
-      ctx.strokeStyle = hv ? '#fff' : `rgb(${80 + i * 175},${220 - i * 160},80)`; ctx.lineWidth = 2;
-      ctx.fillStyle = 'rgba(5,13,9,.85)'; ctx.fillRect(x - r, y - r, r * 2, r * 2); ctx.strokeRect(x - r, y - r, r * 2, r * 2);
+      if (!g3 || hv) { ctx.strokeStyle = hv ? '#fff' : `rgb(${80 + i * 175},${220 - i * 160},80)`; ctx.lineWidth = 2;
+      if (!g3) { ctx.fillStyle = 'rgba(5,13,9,.85)'; ctx.fillRect(x - r, y - r, r * 2, r * 2); } ctx.strokeRect(x - r, y - r, r * 2, r * 2); }
       const big = t.type === 'city' || t.type === 'town';
       const show = big || (t.type === 'village' && cam.z >= 2.2) || (t.pop > 600 && cam.z >= 3.5) || cam.z >= 5.5 || hv;
       if (show) this.placeLabel(t.name, x + r + 5, y + 4, big ? 12 : 11, hv ? '#fff' : big ? GREEN : '#7fe0a0');
@@ -209,7 +231,8 @@ const mapScene = {
     text('TIMIȘ COUNTY', 14, VIEW_TOP + 22, 16, AMBER);
     if (save.clock >= DUSK) text('NIGHT HAS FALLEN — get back to base', W / 2, VIEW_TOP + 24, 15, RED, 'center');
     drawFxList(14, H - 96 - 14 * Math.max(0, save.fx.length - 1)); drawTip('map');
-    text('drag / WASD: pan · wheel / + −: zoom · click a settlement', 14, VIEW_TOP + 40, 11, '#5fa478');
+    text(g3 ? 'drag / WASD: pan · wheel / + −: zoom · middle-drag or [ ]: turn and tilt · click a settlement' : 'drag / WASD: pan · wheel / + −: zoom · click a settlement', 14, VIEW_TOP + 40, 11, '#5fa478');
+    if (g3) { const c0 = mproj(cam.lon, cam.lat), c1 = mproj(cam.lon, cam.lat + .05), a = Math.atan2(c1[1] - c0[1], c1[0] - c0[0]), cx = 40, cy = H - 120; ctx.strokeStyle = GREEN; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, 18, 0, 7); ctx.stroke(); ctx.strokeStyle = AMBER; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(cx - Math.cos(a) * 8, cy - Math.sin(a) * 8); ctx.lineTo(cx + Math.cos(a) * 14, cy + Math.sin(a) * 14); ctx.stroke(); text('N', cx + Math.cos(a) * 26 - 3, cy + Math.sin(a) * 26 + 4, 11, AMBER); }
     text(`${HOME.name} → Timișoara ≈ ${Math.round(ROUTE.km)} km${ROUTE.road ? ' via ' + ROUTE.road : ''}`, 14, VIEW_TOP + 58, 12, AMBER);
     // legend
     { const lx = W - 240, ly = VIEW_TOP + 10; ctx.fillStyle = 'rgba(7,21,13,.82)'; ctx.fillRect(lx, ly, 228, 92); ctx.strokeStyle = DIM; ctx.strokeRect(lx + .5, ly + .5, 228, 92);

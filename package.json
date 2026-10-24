@@ -1,0 +1,16 @@
+{
+  "name": "timis-z-3d",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Timiș Z: a zombie-apocalypse survival game set in Timiș County, Romania. 3D with Three.js (vendored) and a 2D canvas HUD, no build step.",
+  "scripts": {
+    "test": "node tests/smoke.js",
+    "test:2d": "FLAT=1 node tests/smoke.js",
+    "sim:missions": "node tools/sim.js missions",
+    "sim:raids": "node tools/sim.js raids",
+    "sim:economy": "node tools/sim.js economy"
+  },
+  "devDependencies": {
+    "playwright": "^1.40.0"
+  }
+}

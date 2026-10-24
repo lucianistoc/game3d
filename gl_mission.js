@@ -118,6 +118,102 @@ R3D.mission = (() => {
     const side = new THREE.MeshLambertMaterial({ map: t, color: tint || '#ffffff', flatShading: true }); return side;
   };
 
+  // ---- modelled furniture and props for the larger sites (hospital, police, army depot, airport, camps, fuel stops).
+  // Each builds a group in the footprint's own frame: x along the width, z along the depth, centred, standing on y = 0.
+  const PALETTE = ['#2a4a8a', '#c0392b', '#3a6a4a', '#d9822b', '#7a4a8a', '#2aa0a0', '#8a8a30'];
+  const PROPS = {
+    bed(w, d, avg, seed, G) {
+      const B = G.B; B(w, 5, d, '#8a8f96', 0, 3, 0); B(w - 3, 6, d - 3, '#e8eef2', 0, 8, 0); B(w * .22, 3, d - 6, '#fff', -w * .36, 14, 0);   // frame, mattress, pillow
+      B(w * .55, 3, d - 2, PALETTE[Math.floor(seed * 7) % 7], w * .1, 14, 0); for (const sx of [-1, 1]) B(2, 14, d, '#8a8f96', sx * (w / 2 - 1), 7, 0);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) G.cyl(1.5, 3, '#222', sx * (w / 2 - 3), 1.5, sz * (d / 2 - 3));
+    },
+    gurney(w, d, avg, seed, G) {
+      const B = G.B; B(w, 2, d, '#c8ccd0', 0, 9, 0); B(w - 2, 4, d - 3, '#e8eef2', 0, 12, 0); B(w * .2, 2.5, d - 6, '#fff', -w * .35, 16, 0); B(w * .55, 2, d - 2, '#8fc4d8', w * .1, 16, 0);
+      for (const sx of [-1, 1]) { B(2, 8, d - 4, '#9aa0a6', sx * (w / 2 - 6), 4, 0); for (const sz of [-1, 1]) G.cyl(2.2, 2.5, '#111', sx * (w / 2 - 6), 2.2, sz * (d / 2 - 2)); }
+    },
+    cell(w, d, avg, seed, G) {
+      const B = G.B; B(w, 2, d, '#6a6e72', 0, 1, 0);
+      for (let i = 0; i <= 8; i++) { G.cyl(.7, 30, '#4a4e52', -w / 2 + i * w / 8, 15, d / 2); }
+      for (let i = 0; i <= 5; i++) { G.cyl(.7, 30, '#4a4e52', -w / 2, 15, -d / 2 + i * d / 5); G.cyl(.7, 30, '#4a4e52', w / 2, 15, -d / 2 + i * d / 5); }
+      B(w, 1.5, 1.5, '#4a4e52', 0, 30, d / 2); B(w, 1.5, 1.5, '#4a4e52', 0, 30, -d / 2); B(1.5, 1.5, d, '#4a4e52', -w / 2, 30, 0); B(1.5, 1.5, d, '#4a4e52', w / 2, 30, 0); B(w, 30, 2, '#5a5e62', 0, 15, -d / 2);
+      B(w * .5, 4, d * .4, '#7a6a5a', -w * .2, 10, -d * .2); B(w * .5, 2, d * .38, '#8a9aa8', -w * .2, 14, -d * .2); B(8, 8, 8, '#d8d8d8', w * .35, 5, -d * .3);
+    },
+    desk(w, d, avg, seed, G) {
+      const B = G.B; B(w, 2, d, '#8a6a42', 0, 15, 0); B(w * .28, 15, d - 2, '#6a4e30', w * .34, 7.5, 0); B(2, 15, d - 2, '#6a4e30', -w / 2 + 1.5, 7.5, 0);
+      for (let i = 0; i < 3; i++) B(w * .24, 3.5, .6, '#c8ccd0', w * .34, 3 + i * 4.6, d / 2 - .5);
+      B(w * .16, 1, w * .14, '#2a2d31', -w * .12, 17, 0); B(w * .16, 8, 1, '#15171a', -w * .12, 22, -d * .2); B(w * .14, 6, 1, '#2a4a6a', -w * .12, 22.5, -d * .2 + .7); B(w * .22, .8, d * .22, '#2a2d31', w * .05, 17, d * .22);
+    },
+    chair(w, d, avg, seed, G) {
+      const B = G.B, c = PALETTE[Math.floor(seed * 7) % 7]; B(w * .85, 2.5, d * .85, c, 0, 7, 0); B(w * .85, 9, 1.8, c, 0, 12, -d * .4); for (const sx of [-1, 1]) for (const sz of [-1, 1]) G.cyl(.8, 7, '#333', sx * w * .34, 3.5, sz * d * .34);
+    },
+    bench(w, d, avg, seed, G) {
+      const B = G.B; for (let i = 0; i < 3; i++) B(w, 1.2, d / 3 - .6, '#8a6a42', 0, 8, -d / 3 + i * d / 3); B(w, 6, 1.5, '#7a5a38', 0, 12, -d / 2 + .8); for (const sx of [-1, 1]) B(2, 8, d, '#3a3d40', sx * (w / 2 - 3), 4, 0);
+    },
+    benchrow(w, d, avg, seed, G) {
+      const B = G.B, n = Math.max(1, Math.round(w / 38)), pw = w / n; for (let k = 0; k < n; k++) { const x = -w / 2 + pw * (k + .5); B(pw - 4, 2, d * .6, '#2a4a8a', x, 8, d * .15); B(pw - 4, 10, 2, '#2a4a8a', x, 14, -d * .15); for (const sx of [-1, 1]) B(1.5, 8, d * .6, '#9aa0a6', x + sx * (pw / 2 - 4), 4, d * .15); }
+    },
+    luggage(w, d, avg, seed, G) {
+      const B = G.B, n = Math.max(2, Math.round(w / 18)); for (let i = 0; i < n; i++) { const c = PALETTE[(i + Math.floor(seed * 7)) % 7], ww = 12 + (i % 3) * 3, hh = 7 + (i % 2) * 5; B(ww, hh, 8, c, -w / 2 + (i + .5) * w / n, hh / 2 + 1, (i % 2 ? -1 : 1) * d * .12); B(ww - 2, 1.2, 8.3, '#222', -w / 2 + (i + .5) * w / n, hh * .6, (i % 2 ? -1 : 1) * d * .12); B(3, 3, 1, '#ccc', -w / 2 + (i + .5) * w / n, hh + 2, (i % 2 ? -1 : 1) * d * .12); }
+    },
+    carousel(w, d, avg, seed, G) {
+      const B = G.B; B(w, 3, d, '#2a2d31', 0, 3, 0); B(w - 8, 1.2, d - 8, '#15161a', 0, 4.8, 0); for (let i = 0; i < 6; i++) B(14, 1, 3, '#6a6e72', -w / 2 + 14 + i * (w - 28) / 5, 5.6, d / 2 - 2);
+      for (let i = 0; i < 3; i++) B(12 + i * 2, 8, 8, PALETTE[(i * 2 + 1) % 7], -w * .25 + i * w * .22, 9, (i - 1) * 3);
+    },
+    forklift(w, d, avg, seed, G) {
+      const B = G.B; B(w * .6, 9, d * .8, '#e8a020', -w * .12, 9, 0); B(w * .3, 10, d * .7, '#e8a020', -w * .28, 18, 0); for (const sx of [-1, 1]) B(1.5, 22, 1.5, '#3a3d40', w * .28 + 0, 19, sx * 7); B(1.5, 26, d * .6, '#3a3d40', w * .38, 15, 0);
+      for (const sz of [-1, 1]) B(w * .3, 1.5, 2.5, '#5a5e62', w * .52, 3, sz * 5); B(w * .42, 1, d * .76, '#2a2d31', -w * .12, 25, 0);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) G.cyl(4, 3, '#111', sx * w * .26 + (sx < 0 ? -w * .1 : w * .05), 4, sz * d * .38).rotation.x = Math.PI / 2;
+    },
+    tower(w, d, avg, seed, G) {
+      const B = G.B, H = 78; for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const l = G.cyl(2, H, '#6a5a3a', sx * (w / 2 - 4), H / 2, sz * (d / 2 - 4)); }
+      for (const y of [22, 46]) for (const s of [-1, 1]) { B(w - 6, 1.5, 1.5, '#5a4a2a', 0, y, s * (d / 2 - 4)); B(1.5, 1.5, d - 6, '#5a4a2a', s * (w / 2 - 4), y, 0); }
+      B(w, 3, d, '#7a6a4a', 0, H, 0); for (const s of [-1, 1]) { B(w, 9, 1.5, '#6a5a3a', 0, H + 5, s * (d / 2 - .8)); B(1.5, 9, d, '#6a5a3a', s * (w / 2 - .8), H + 5, 0); }
+      const roof = R3D.mesh(R3D.prism(w + 8, 14, d + 8), R3D.mat('#4a5a2a'), 0, H + 24, 0, G.grp); B(w * .4, 6, w * .2, '#2a2d31', 0, H + 6, d / 2 - 6);
+    },
+    tent(w, d, avg, seed, G) {
+      const c = PALETTE[Math.floor(seed * 7) % 7], col = seed > .5 ? '#6a7a4a' : '#8a8a6a'; R3D.mesh(R3D.prism(w, 38, d), R3D.mat(col), 0, 0, 0, G.grp); const B = G.B;
+      B(w * .22, 24, 1, '#1a1a14', 0, 12, d / 2 + .4); for (const sx of [-1, 1]) { G.cyl(.8, 40, '#4a3a22', sx * w / 2, 20, d / 2 + 3); G.cyl(.4, 24, '#9a8a6a', sx * (w / 2 + 6), 12, d / 2 + 8).rotation.z = sx * .4; }
+    },
+    sandbag(w, d, avg, seed, G) {
+      const n = 3, B = G.B; for (let r = 0; r < n; r++) { const step = 7; for (let i = 0; i < Math.max(2, Math.round((w > d ? w : d) / step)); i++) { const along = w > d, off = r % 2 ? step / 2 : 0, len = along ? w : d, t = -len / 2 + (i + .5) * len / Math.max(2, Math.round(len / step)) + off * 0; const bag = along ? B(step - .8, 4.2, d * .9, r % 2 ? '#a99262' : '#b9a272', t, r * 4.4, 0) : B(w * .9, 4.2, step - .8, r % 2 ? '#a99262' : '#b9a272', 0, r * 4.4, t); } }
+    },
+    pallet(w, d, avg, seed, G) {
+      const B = G.B; for (let i = 0; i < 3; i++) B(w, 2, 5, '#a8824e', 0, 0, -d / 2 + 3 + i * (d - 6) / 2); for (const x of [-1, 0, 1]) B(6, 3, d, '#8a6a3a', x * (w / 2 - 4), 2, 0);
+      const nx = Math.max(1, Math.round(w / 22)), nz = Math.max(1, Math.round(d / 22)), lv = 2 + Math.floor(seed * 2);
+      for (let l = 0; l < lv; l++) for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) { if (l === lv - 1 && (i + k) % 3 === 2) continue; B(w / nx - 2, 14, d / nz - 2, (i + k + l) % 3 ? '#b08a56' : '#98764a', -w / 2 + (i + .5) * w / nx, 5 + l * 14.5, -d / 2 + (k + .5) * d / nz); }
+      B(w * .8, .6, d * .8, 'rgba(220,230,240,0.6)', 0, 5 + lv * 14.5, 0);
+    },
+    cart(w, d, avg, seed, G) {
+      const B = G.B; B(w * .8, 1, d * .8, '#9aa0a6', 0, 4, 0); for (const sx of [-1, 1]) B(1, 9, d * .8, '#c8ccd0', sx * w * .4, 8.5, 0); for (const sz of [-1, 1]) B(w * .8, 9, 1, '#c8ccd0', 0, 8.5, sz * d * .4);
+      B(w * .8, 1.5, 1.5, '#e04a3a', 0, 14, -d * .4); B(1.5, 10, d * .8, '#e04a3a', -w * .4, 12, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) G.cyl(1.4, 2, '#222', sx * w * .35, 1.5, sz * d * .35);
+    },
+    pump(w, d, avg, seed, G) {
+      const B = G.B; B(w, 3, d, '#8a8d90', 0, 1.5, 0); B(w * .6, 28, d * .5, '#e8e8e0', 0, 17, 0); B(w * .6 + 1, 5, d * .5 + 1, '#c0302a', 0, 31, 0); B(w * .4, 6, .8, '#15161a', 0, 24, d * .25 + .1); B(w * .3, 2, .6, '#4f6', 0, 24.5, d * .25 + .5);
+      for (const sx of [-1, 1]) { G.cyl(.7, 14, '#222', sx * w * .22, 12, d * .3); B(1.4, 5, 2.4, '#3a3d40', sx * w * .22, 20, d * .35); }
+    },
+    lumber(w, d, avg, seed, G) {
+      const B = G.B, n = 5; for (let r = 0; r < n; r++) for (let i = 0; i < 3; i++) B(w * .96, 3.2, d / 3 - .8, r % 2 ? '#b08a56' : '#c49a62', 0, r * 3.3, -d / 3 + i * d / 3);
+      for (const x of [-1, 1]) B(1.5, n * 3.3 + 1, d, '#6a4a2a', x * (w / 2 - 6), (n * 3.3 + 1) / 2, 0);
+    },
+    rubble(w, d, avg, seed, G) {
+      for (let i = 0; i < 14; i++) { const s = 4 + ((i * 37 + seed * 100) % 9), x = ((i * 53 + seed * 70) % 100) / 100 - .5, z = ((i * 29 + seed * 40) % 100) / 100 - .5, b = G.B(s, s * .7, s * .9, ['#8a8d90', '#6a6e72', '#9a9288', '#7a6a5a'][i % 4], x * w * .8, s * .35, z * d * .8); b.rotation.set(i * .4, i * 1.3, i * .2); }
+    },
+    boat(w, d, avg, seed, G) {
+      const B = G.B; B(w, 6, d, '#e8e4d8', 0, 8, 0); B(w * .96, 3, d * .8, '#2a5a8a', 0, 3, 0); B(w * .5, 8, d * .6, '#f2f0e8', -w * .1, 16, 0); B(w * .5, 4, d * .6 + .3, '#27333f', -w * .1, 18, 0); B(1.2, 24, 1.2, '#cfd3d6', w * .25, 14, 0);
+    },
+    showroom(w, d, avg, seed, G) {
+      const B = G.B; for (const [x, z, ww, dd] of [[0, -d / 2, w, 1.5], [0, d / 2, w, 1.5], [-w / 2, 0, 1.5, d], [w / 2, 0, 1.5, d]]) { B(ww, 34, dd, '#bcc4c8', x, 17, z); }
+      R3D.mesh(R3D.box(w - 1, 30, d - 1), R3D.mat('#9fd0e8', { op: .22 }), 0, 17, 0, G.grp, false); B(w + 2, 2, d + 2, '#6a6e72', 0, 35, 0);
+    },
+  };
+  PROPS.cage = PROPS.cell;
+  const makeProp = (st, w, hh, avg, seed) => {
+    const grp = new THREE.Group(), G = { grp };
+    G.B = (bw, bh, bd, color, x, y, z) => { const mm = R3D.mesh(R3D.box(Math.max(.1, bw), Math.max(.1, bh), Math.max(.1, bd)), color.startsWith('rgba') ? R3D.mat('#dfe8f0', { op: .5 }) : R3D.mat(color), x, y + bh / 2, z, grp); return mm; };
+    G.cyl = (r, h, color, x, cy, z) => R3D.mesh(R3D.cyl(r, r, h, 8), R3D.mat(color), x, cy, z, grp);
+    PROPS[st](w, hh, avg, seed || 0, G); return grp;
+  };
+
   // a wall as a box: sides take the colour of the art, the top shows the art itself
   M.wallMesh = (m, g, w, forceH) => {
     const grp = new THREE.Group(), st = w.style;
@@ -135,9 +231,6 @@ R3D.mission = (() => {
       for (let i = 0; i < 6; i++) { const a = i * 2.4 + px, rr = i ? r * .55 : 0; const c = R3D.mesh(R3D.blob((i ? .55 : .85) * r, i + 3), R3D.mat(rgb(avg, .7 + (i % 3) * .1)), cx + Math.cos(a) * rr, 44 + (i % 3) * 5 + (i ? 0 : 6), cz + Math.sin(a) * rr); c.rotation.y = i; grp.add(c); }
       return grp;
     }
-    if (st === 'tent') {
-      const t = R3D.mesh(R3D.prism(ww, 38, hh), R3D.mat(rgb(avg, .95)), cx, 0, cz); grp.add(t); return grp;
-    }
     if (st === 'house') {
       const bh = 40, geo = new THREE.BoxGeometry(ww, bh, hh); tex(geo, px, py, px + ww, py + hh);
       const side = R3D.mat(rgb(avg, .85)); const body = new THREE.Mesh(geo, [side, side, R3D.mat('#000'), side, side, side]); body.position.set(cx, bh / 2, cz); body.castShadow = body.receiveShadow = true; grp.add(body);
@@ -153,6 +246,7 @@ R3D.mission = (() => {
       else if (w.cage) { for (let i = -2; i <= 2; i++) { grp.add(R3D.mesh(R3D.cyl(1.2, 1.2, 34, 6), R3D.mat('#8a8f96'), cx + i * 9, 17, cz - 22)); grp.add(R3D.mesh(R3D.cyl(1.2, 1.2, 34, 6), R3D.mat('#8a8f96'), cx + i * 9, 17, cz + 22)); grp.add(R3D.mesh(R3D.cyl(1.2, 1.2, 34, 6), R3D.mat('#8a8f96'), cx - 22, 17, cz + i * 9)); grp.add(R3D.mesh(R3D.cyl(1.2, 1.2, 34, 6), R3D.mat('#8a8f96'), cx + 22, 17, cz + i * 9)); } grp.add(R3D.mesh(R3D.box(46, 2, 46), R3D.mat('#8a8f96'), cx, 35, cz)); }
       return grp;
     }
+    if (PROPS[st]) { const pg = makeProp(st, ww, hh, avg, w.seed); pg.position.set(cx, 0, cz); return pg; }
     const h = WALL_H[st] || 20, geo = new THREE.BoxGeometry(ww, h, hh); tex(geo, px, py, px + ww, py + hh);
     const k = st === 'container' || st === 'counter' || st === 'locker' ? 1 : .92, side = SIDE_STYLES.has(st) ? sideMats(st, ww, hh, h, geo, st === 'container' && w.col ? w.col : '#ffffff') : new THREE.MeshLambertMaterial({ color: rgb(w.col ? hexToRgb(w.col) : avg, k), flatShading: true });
     const mesh = new THREE.Mesh(geo, [side, side, g.floorMat, side, side, side]); mesh.position.set(cx, h / 2, cz); mesh.castShadow = h > 3; mesh.receiveShadow = true; grp.add(mesh);

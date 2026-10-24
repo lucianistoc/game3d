@@ -92,6 +92,26 @@ const mapScene = {
     for (const o of this.labels) if (r.x < o.x + o.w && r.x + r.w > o.x && r.y < o.y + o.h && r.y + r.h > o.y) return false;
     this.labels.push(r); text(s, x, y, size, color, align); return true;
   },
+  // Dashed polylines made of short solid segments, skipping what is off screen. A dashed ctx.stroke() of a long path
+  // (the county border, the neighbouring regions) cost ~0.4 s per frame to rasterise when zoomed out; this is ~1 ms.
+  tracePathDashed(pts, dash, gap, off = 0, close = false) {
+    ctx.beginPath(); const cyc = dash + gap, n = pts.length + (close ? 1 : 0); let ph = ((off % cyc) + cyc) % cyc, px = 0, py = 0;
+    for (let i = 0; i < n; i++) {
+      const [lo, la] = pts[i % pts.length], [x, y] = mproj(lo, la);
+      if (i) {
+        const dx = x - px, dy = y - py, len = Math.hypot(dx, dy);
+        if (len > 0) {
+          if (Math.max(px, x) < -20 || Math.min(px, x) > W + 20 || Math.max(py, y) < VIEW_TOP - 20 || Math.min(py, y) > H + 20) ph = (ph + len) % cyc;
+          else for (let s = 0; s < len;) {
+            const inDash = ph < dash, step = Math.min((inDash ? dash : cyc) - ph, len - s);
+            if (inDash) { ctx.moveTo(px + dx * s / len, py + dy * s / len); ctx.lineTo(px + dx * (s + step) / len, py + dy * (s + step) / len); }
+            s += step; ph += step; if (ph >= cyc - 1e-9) ph = 0;
+          }
+        }
+      }
+      px = x; py = y;
+    }
+  },
   tracePath(pts) { ctx.beginPath(); pts.forEach(([lo, la], i) => { const [x, y] = mproj(lo, la); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); },
   draw(dt, time) {
     this.labels = [];
@@ -105,9 +125,8 @@ const mapScene = {
     for (let la = Math.ceil(la0 / stp) * stp; la <= la1; la += stp) { const [, y] = mproj(0, la); ctx.moveTo(0, Math.round(y) + .5); ctx.lineTo(W, Math.round(y) + .5); }
     ctx.stroke();
     // neighbouring regions (context)
-    ctx.strokeStyle = '#17402a'; ctx.setLineDash([6, 5]); ctx.lineWidth = 1;
-    for (const n of GEO.neigh) { this.tracePath(n.p); ctx.stroke(); }
-    ctx.setLineDash([]);
+    ctx.strokeStyle = '#17402a'; ctx.lineWidth = 1; ctx.beginPath();
+    for (const n of GEO.neigh) this.tracePathDashed(n.p, 6, 5, 0), ctx.stroke();
     // county
     this.tracePath(GEO.county); ctx.closePath();
     ctx.fillStyle = 'rgba(40,120,70,0.07)'; ctx.fill();
@@ -126,25 +145,26 @@ const mapScene = {
     };
     drawRoads(true);
     ctx.save(); this.tracePath(GEO.county); ctx.closePath(); ctx.clip();
-    ctx.shadowColor = '#3f6'; ctx.shadowBlur = 4; drawRoads(false); ctx.shadowBlur = 0;
+    // glow: a wider, faint pass under the bright one. (ctx.shadowBlur here cost ~0.5 s per frame when zoomed out.)
+    ctx.globalAlpha = .16; for (const r of GEO.roads) { if (r.t === 'road' && cam.z < 1.5) continue; ctx.strokeStyle = '#3f6'; ctx.lineWidth = roadStyle[r.t][1] * (cam.z > 5 ? 1.4 : 1) + 5; this.tracePath(r.p); ctx.stroke(); } ctx.globalAlpha = 1;
+    drawRoads(false);
     if (hasLocalRoads) {   // real local roads, if an OSM export was added (see tools/README.md)
       ctx.strokeStyle = '#2fbf62'; ctx.lineWidth = 1.2;
       for (const r of LOCAL_ROADS) { if (cam.z < (r.t === 'sec' ? 1.6 : 3)) continue; this.tracePath(r.p); ctx.stroke(); }
     }
     ctx.restore();
     // county outline on top
-    this.tracePath(GEO.county); ctx.closePath();
-    ctx.strokeStyle = '#d6ffe4'; ctx.lineWidth = 2; ctx.setLineDash([14, 6]); ctx.stroke(); ctx.setLineDash([]);
+    this.tracePathDashed(GEO.county, 14, 6, 0, true);
+    ctx.strokeStyle = '#d6ffe4'; ctx.lineWidth = 2; ctx.stroke();
 
     // route Cărani -> Timișoara along the real road (amber), approximate local links (dashed)
     if (cam.z >= 1.2) {
-      ctx.strokeStyle = AMBER; ctx.lineWidth = 3; ctx.globalAlpha = .85; ctx.setLineDash([10, 6]); ctx.lineDashOffset = -time * 12;
-      this.tracePath(ROUTE.pts); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.strokeStyle = AMBER; ctx.lineWidth = 3; ctx.globalAlpha = .85;
+      this.tracePathDashed(ROUTE.pts, 10, 6, -time * 12); ctx.stroke(); ctx.globalAlpha = 1;
     }
     if (!hasLocalRoads && cam.z >= 3) {
-      ctx.strokeStyle = 'rgba(80,200,120,.7)'; ctx.lineWidth = 1.2; ctx.setLineDash([4, 5]);
-      for (const n of NEIGHBOURS) { this.tracePath([[HOME.lon, HOME.lat], [n.lon, n.lat]]); ctx.stroke(); }
-      ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(80,200,120,.7)'; ctx.lineWidth = 1.2;
+      for (const n of NEIGHBOURS) { this.tracePathDashed([[HOME.lon, HOME.lat], [n.lon, n.lat]], 4, 5); ctx.stroke(); }
     }
 
     // settlements, biggest first so they win label space

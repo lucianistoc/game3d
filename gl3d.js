@@ -115,6 +115,41 @@ const R3D = (() => {
   };
   R.tint = (g, hex, amt) => { for (const m of g.userData.mats) { if (amt > 0) { m.emissive.set(hex); m.emissiveIntensity = amt; } else m.emissiveIntensity = 0; } };
 
+  // ---------------------------------------------------------------- vehicles: car, pickup, van, box truck and three EVs, each its own shape.
+  // Length L along x (front is +x), width Wd along z, standing on y = 0. opt: { burnt, cargo (box-truck colour) }
+  R.vehicle = (type, color, L, Wd, opt = {}) => {
+    const g = new THREE.Group(), H = Wd, wr = Wd * .2, ev = type.startsWith('ev_'), t = type.replace('ev_', ''), burnt = !!opt.burnt;
+    const body = burnt ? '#1c1a18' : color, glass = burnt ? '#080808' : '#27333f', cy = '#46e6ff';
+    const P = (x, y, z, w, h, d, c, o) => { const m = R.mesh(R.box(w, h, d), R.mat(c, o), x, y + h / 2, z, g); return m; };
+    const y0 = wr * .8, accent = !burnt && ev ? { em: cy, ei: 1 } : null;
+    if (t === 'car') {
+      P(0, y0, 0, L, H * .28, Wd, body); P(-L * .06, y0 + H * .28, 0, L * .48, H * .24, Wd * .86, body); P(-L * .06, y0 + H * .31, 0, L * .48 + .4, H * .16, Wd * .86 + .3, glass);
+    } else if (t === 'pickup') {
+      P(0, y0, 0, L, H * .26, Wd, body); P(L * .14, y0 + H * .26, 0, L * .36, H * .26, Wd * .9, body); P(L * .14, y0 + H * .3, 0, L * .37, H * .17, Wd * .92, glass);
+      P(-L * .5 + .1, y0 + H * .26, 0, .2, H * .14, Wd, body); for (const sz of [-1, 1]) P(-L * .17, y0 + H * .26, sz * (Wd / 2 - .05), L * .66, H * .14, .1, body);
+      P(-L * .17, y0 + H * .27, 0, L * .62, .06 * H, Wd * .8, '#2a2a2a');
+    } else if (t === 'van') {
+      P(0, y0, 0, L, H * .62, Wd, body); P(L * .5 - .05, y0 + H * .3, 0, .12, H * .26, Wd * .88, glass);
+      for (const sz of [-1, 1]) { P(L * .2, y0 + H * .34, sz * Wd / 2, L * .22, H * .18, .08, glass); }
+    } else if (t === 'truck') {
+      P(L * .37, y0, 0, L * .26, H * .5, Wd * .96, body); P(L * .5 - .05, y0 + H * .25, 0, .12, H * .2, Wd * .86, glass);
+      P(-L * .13, y0 + H * .06, 0, L * .68, H * .84, Wd, burnt ? '#222' : (opt.cargo || '#d8d8d4')); P(-L * .13, y0 + H * .9, 0, L * .68, .05 * H, Wd * 1.02, '#9a9a96');
+    } else if (t === 'suv') {   // electric SUV: taller wagon with roof rails
+      P(0, y0, 0, L, H * .34, Wd, body); P(-L * .02, y0 + H * .34, 0, L * .62, H * .3, Wd * .92, body); P(-L * .02, y0 + H * .37, 0, L * .63, H * .2, Wd * .94, glass);
+      for (const sz of [-1, 1]) P(-L * .02, y0 + H * .64, sz * Wd * .38, L * .56, .04 * H, .06, '#222');
+    } else {   // 'hatchback' (electric car)
+      P(0, y0, 0, L, H * .3, Wd, body); P(-L * .1, y0 + H * .3, 0, L * .56, H * .26, Wd * .86, body); P(-L * .1, y0 + H * .33, 0, L * .57, H * .17, Wd * .88, glass);
+    }
+    if (type === 'ev_van') { P(0, y0 + H * .62, 0, L * .6, .05 * H, Wd * .7, '#15305c'); }   // solar roof panel
+    if (accent) { for (const sz of [-1, 1]) P(0, y0 + H * .12, sz * (Wd / 2 + .01), L * .8, .035 * H, .03, cy, accent); P(L / 2 - .03, y0 + H * .12, 0, .06, .05 * H, Wd * .86, cy, accent); P(L * .3, y0 + H * .27, Wd / 2, .08 * L, .07 * H, .04, cy, accent); }
+    if (!burnt) { for (const sz of [-1, 1]) { R.mesh(R.box(.06 * L + .05, .09 * H, .2 * Wd), R.basic('#fff2b0'), L / 2, y0 + H * .17, sz * Wd * .33, g, false); R.mesh(R.box(.05 * L + .04, .07 * H, .16 * Wd), R.basic('#d02a2a'), -L / 2, y0 + H * .2, sz * Wd * .36, g, false); } }
+    P(L / 2 - .02, y0, 0, .08, .08 * H, Wd * .98, '#2a2a2a'); P(-L / 2 - .06, y0, 0, .08, .08 * H, Wd * .98, '#2a2a2a');
+    if (!ev) R.mesh(R.cyl(.03 * Wd, .03 * Wd, .12 * L, 6), R.mat('#444'), -L / 2 - .02, y0 + .02, Wd * .3, g).rotation.z = Math.PI / 2;
+    const wx = t === 'truck' ? [.34, -.3, -.4] : [.31, -.31];
+    for (const x of wx) for (const sz of [-1, 1]) { const w = R.mesh(R.cyl(wr, wr, Wd * .14, 12), R.mat('#111'), x * L, wr, sz * (Wd / 2 - Wd * .04), g); w.rotation.x = Math.PI / 2; const hub = R.mesh(R.cyl(wr * .5, wr * .5, Wd * .15, 8), R.mat(burnt ? '#222' : '#aab'), x * L, wr, sz * (Wd / 2 - Wd * .035), g, false); hub.rotation.x = Math.PI / 2; }
+    return g;
+  };
+
   // ---------------------------------------------------------------- particles (one Points object, a fixed pool)
   R.particles = (max, size) => {
     const pos = new Float32Array(max * 3), col = new Float32Array(max * 3), geo = new THREE.BufferGeometry();

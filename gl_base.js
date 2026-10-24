@@ -200,18 +200,7 @@ R3D.base = (() => {
   };
 
   // vehicles parked on the street
-  const makeVehicle = v => {
-    const T = VEHICLE_TYPES[v.type], t = v.type.replace('ev_', ''), L = T.len * GSCALE, Wd = 1.2, c = v.color || '#2f4a7a', grp = new THREE.Group(), glass = '#27333f';
-    const part = (x, y, z, w, h, d, cc) => R3D.mesh(R3D.box(w, h, d), R3D.mat(cc), x, y + h / 2, z, grp);
-    if (t === 'truck') { part(-L * .12, .25, 0, L * .7, 1.05, Wd, '#d8d8d4'); part(L * .38, .25, 0, L * .22, .8, Wd * .96, c); part(L * .45, .65, 0, L * .1, .35, Wd * .9, glass); }
-    else if (t === 'van') { part(0, .25, 0, L, .85, Wd, c); part(L * .38, .75, 0, L * .2, .3, Wd * .92, glass); }
-    else if (t === 'pickup') { part(0, .25, 0, L, .45, Wd, c); part(L * .12, .7, 0, L * .36, .4, Wd * .9, c); part(L * .12, .78, 0, L * .37, .22, Wd * .92, glass); }
-    else if (t === 'suv') { part(0, .25, 0, L, .55, Wd, c); part(-L * .02, .8, 0, L * .62, .42, Wd * .92, c); part(-L * .02, .85, 0, L * .63, .28, Wd * .94, glass); }
-    else { part(0, .25, 0, L, .45, Wd, c); part(-L * .05, .7, 0, L * .5, .36, Wd * .88, c); part(-L * .05, .76, 0, L * .51, .22, Wd * .9, glass); }
-    for (const sx of [-.32, .32]) for (const sz of [-1, 1]) { const w = R3D.mesh(R3D.cyl(.26, .26, .2, 10), R3D.mat('#111'), sx * L, .26, sz * Wd / 2, grp); w.rotation.x = Math.PI / 2; }
-    return grp;
-  };
-
+  const makeVehicle = v => R3D.vehicle(v.type, v.color || '#2f4a7a', VEHICLE_TYPES[v.type].len * GSCALE, 1.2);
   const crewMesh = c => R3D.humanoid({ skin: '#caa07a', shirt: ROLES[c.role] ? ROLES[c.role].color : '#8a8', pants: '#2f3440', hat: '#3a3a40', scale: 1.15, pose: 'idle' });
   const ZB = { walker: [1.15, 1], runner: [1.1, .95], brute: [1.5, 1.45], spitter: [1.15, 1.05], armored: [1.22, 1.12] };
   const ZSKIN = { walker: '#7d9468', brute: '#8c946a', runner: '#a3ad84', spitter: '#97c93f', armored: '#6f8a6c' };
@@ -246,6 +235,7 @@ R3D.base = (() => {
 
   // ---------------------------------------------------------------- camera
   B.fit = () => { if (!g) init(); g.tx = GX / 2 - 1; g.tz = GY / 2 + 1; g.dist = Math.max(30, Math.min(60, 62 * Math.min(1.15, innerWidth / innerHeight) ** -.3)); g.yaw = .55; g.pitch = .95; };
+  B.look = (x, z) => { if (!g) init(); g.tx = x; g.tz = z; };
   B.zoom = f => { if (!g) init(); g.dist = Math.max(8, Math.min(90, g.dist / f)); };
   B.camUpdate = (sc, dt) => {
     if (!g) init();

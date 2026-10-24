@@ -89,13 +89,8 @@ R3D.mission = (() => {
     const avg = avgColor(g.floorCv, px, py, ww, hh);
     const tex = (geo, x0, y0, x1, y1) => { const uv = geo.attributes.uv; const u0 = x0 / SW, u1 = x1 / SW, v0 = 1 - y0 / SH, v1 = 1 - y1 / SH; uv.setXY(8, u0, v0); uv.setXY(9, u1, v0); uv.setXY(10, u0, v1); uv.setXY(11, u1, v1); uv.needsUpdate = true; };
     if (st === 'car') {
-      const col = w.burnt ? '#1c1a18' : (w.col || '#666'), long = ww >= hh, L = long ? ww : hh, Wd = long ? hh : ww;
-      const car = new THREE.Group(); car.position.set(cx, 0, cz); if (!long) car.rotation.y = Math.PI / 2;
-      car.add(R3D.mesh(R3D.box(L, 10, Wd), R3D.mat(col), 0, 8, 0));
-      car.add(R3D.mesh(R3D.box(L * .5, 8, Wd * .82), R3D.mat(col), -L * .04, 17, 0));
-      car.add(R3D.mesh(R3D.box(L * .5 + .4, 5, Wd * .82 + .4), R3D.mat(w.burnt ? '#0c0c0c' : '#27333f'), -L * .04, 17.5, 0));
-      for (const sx of [-.32, .32]) for (const sz of [-1, 1]) { const wh = R3D.mesh(R3D.cyl(4.5, 4.5, 3, 10), R3D.mat('#111'), sx * L, 4.5, sz * Wd / 2); wh.rotation.x = Math.PI / 2; car.add(wh); }
-      if (w.military) car.children[0].material = R3D.mat('#5a6a3a');
+      const long = ww >= hh, L = long ? ww : hh, Wd = long ? hh : ww;
+      const car = R3D.vehicle(w.veh || 'car', w.col || '#666', L, Wd, { burnt: w.burnt, cargo: w.military ? '#4a5a2a' : undefined }); car.position.set(cx, 0, cz); if (!long) car.rotation.y = Math.PI / 2;
       grp.add(car); grp.userData.sig = (w.burnt ? 1 : 0) + (w.alarmOn ? 2 : 0); return grp;
     }
     if (st === 'tree') {

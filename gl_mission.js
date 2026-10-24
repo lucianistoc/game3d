@@ -82,6 +82,42 @@ R3D.mission = (() => {
     g.ready = true; g.lastTown = town;
   };
 
+  // side textures for the shop furniture: goods on shelves, glass fridge doors, corrugated containers, lockers, counters
+  const sideTex = {};
+  const SIDE_STYLES = new Set(['shelf', 'rack', 'prack', 'fridge', 'container', 'locker', 'counter', 'coldroom']);
+  const getSideTex = st => {
+    if (sideTex[st]) return sideTex[st];
+    const c = document.createElement('canvas'); c.width = 128; c.height = 64; const x = c.getContext('2d'), R = (a, b) => a + Math.random() * (b - a);
+    const pal = ['#c0392b', '#2e7d32', '#1e5aa8', '#e8a33a', '#d8d8d0', '#7a4a2a', '#8a3ab0', '#e8e8a0', '#2aa0a0'];
+    if (st === 'shelf' || st === 'rack' || st === 'prack') {
+      x.fillStyle = st === 'shelf' ? '#5d6269' : '#4a4036'; x.fillRect(0, 0, 128, 64);
+      for (let r = 0; r < 3; r++) {
+        const y0 = r * 21 + 1; x.fillStyle = '#2a2d31'; x.fillRect(0, y0 + 19, 128, 2);
+        for (let i = 0; i < 128;) { const w = st === 'shelf' ? R(5, 11) : R(14, 26), h = st === 'shelf' ? R(9, 17) : R(12, 18); x.fillStyle = st === 'shelf' ? pal[Math.floor(Math.random() * pal.length)] : (Math.random() < .7 ? '#a8824e' : '#8a6a3a'); x.fillRect(i + 1, y0 + 19 - h, w - 1, h); if (st === 'shelf') { x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(i + 1, y0 + 19 - h, w - 1, 2); } else { x.fillStyle = 'rgba(0,0,0,.25)'; x.fillRect(i + w / 2 - 1, y0 + 19 - h, 2, h); } i += w + R(0, 3); }
+      }
+      x.fillStyle = '#e0a020'; x.fillRect(0, 0, 3, 64); x.fillRect(125, 0, 3, 64);
+    } else if (st === 'fridge') {
+      x.fillStyle = '#dfe6ea'; x.fillRect(0, 0, 128, 64);
+      for (let d = 0; d < 4; d++) { x.fillStyle = '#243847'; x.fillRect(d * 32 + 3, 4, 26, 56); for (let k = 0; k < 14; k++) { x.fillStyle = pal[Math.floor(Math.random() * pal.length)]; x.globalAlpha = .75; x.fillRect(d * 32 + 5 + R(0, 20), 6 + Math.floor(k / 5) * 18 + R(0, 8), 5, 9); } x.globalAlpha = 1; x.fillStyle = 'rgba(255,255,255,.18)'; x.fillRect(d * 32 + 5, 5, 8, 54); x.fillStyle = '#eee'; x.fillRect(d * 32 + 27, 14, 2, 34); }
+    } else if (st === 'container') {
+      x.fillStyle = '#fff'; x.fillRect(0, 0, 128, 64); for (let i = 0; i < 128; i += 4) { x.fillStyle = 'rgba(0,0,0,.28)'; x.fillRect(i, 0, 2, 64); x.fillStyle = 'rgba(255,255,255,.2)'; x.fillRect(i + 2, 0, 1, 64); }
+      x.fillStyle = 'rgba(0,0,0,.4)'; x.fillRect(0, 0, 128, 3); x.fillRect(0, 61, 128, 3); x.fillRect(62, 4, 2, 56); x.fillStyle = 'rgba(40,20,10,.25)'; for (let i = 0; i < 9; i++) x.fillRect(R(0, 120), R(6, 56), R(4, 14), 2);
+    } else if (st === 'locker') {
+      x.fillStyle = '#8a949c'; x.fillRect(0, 0, 128, 64); for (let d = 0; d < 4; d++) { x.fillStyle = '#6c767e'; x.fillRect(d * 32 + 1, 1, 30, 62); for (let s = 0; s < 4; s++) { x.fillStyle = '#2a3036'; x.fillRect(d * 32 + 6, 6 + s * 3, 20, 1.5); } x.fillStyle = '#d8d8d8'; x.fillRect(d * 32 + 22, 30, 3, 8); x.fillStyle = '#e8e0b0'; x.fillRect(d * 32 + 8, 44, 14, 8); }
+    } else if (st === 'counter') {
+      x.fillStyle = '#7a5a38'; x.fillRect(0, 0, 128, 64); for (let i = 0; i < 4; i++) { x.fillStyle = '#8a6a42'; x.fillRect(i * 32 + 3, 8, 26, 46); x.strokeStyle = '#4a3220'; x.strokeRect(i * 32 + 3.5, 8.5, 25, 45); } x.fillStyle = '#c8c8c0'; x.fillRect(0, 0, 128, 5); x.fillStyle = '#4a3220'; x.fillRect(0, 58, 128, 6);
+    } else {   // cold room panels
+      x.fillStyle = '#cfd8dc'; x.fillRect(0, 0, 128, 64); for (let i = 0; i < 128; i += 32) { x.fillStyle = '#8a969c'; x.fillRect(i, 0, 2, 64); for (let k = 0; k < 4; k++) { x.fillStyle = '#6a767c'; x.fillRect(i + 4 + k * 7, 6, 2, 2); x.fillRect(i + 4 + k * 7, 56, 2, 2); } } x.fillStyle = 'rgba(120,160,200,.2)'; x.fillRect(0, 0, 128, 64);
+    }
+    const t = R3D.canvasTex(c, 1, 1); t.wrapS = t.wrapT = THREE.RepeatWrapping; sideTex[st] = t; return t;
+  };
+  const sideMats = (st, ww, hh, h, geo, tint) => {   // tile the texture along each side face instead of stretching it
+    const t = getSideTex(st), uv = geo.attributes.uv;
+    for (let f of [0, 1, 4, 5]) { const len = f < 2 ? hh : ww, ru = Math.max(1, Math.round(len / 64)), rv = Math.max(1, Math.round(h / 32)); for (let i = 0; i < 4; i++) { const k = f * 4 + i; uv.setXY(k, uv.getX(k) * ru, uv.getY(k) * rv); } }
+    uv.needsUpdate = true;
+    const side = new THREE.MeshLambertMaterial({ map: t, color: tint || '#ffffff', flatShading: true }); return side;
+  };
+
   // a wall as a box: sides take the colour of the art, the top shows the art itself
   M.wallMesh = (m, g, w, forceH) => {
     const grp = new THREE.Group(), st = w.style;
@@ -118,7 +154,7 @@ R3D.mission = (() => {
       return grp;
     }
     const h = WALL_H[st] || 20, geo = new THREE.BoxGeometry(ww, h, hh); tex(geo, px, py, px + ww, py + hh);
-    const k = st === 'container' || st === 'counter' || st === 'locker' ? 1 : .92, side = new THREE.MeshLambertMaterial({ color: rgb(w.col ? hexToRgb(w.col) : avg, k), flatShading: true });
+    const k = st === 'container' || st === 'counter' || st === 'locker' ? 1 : .92, side = SIDE_STYLES.has(st) ? sideMats(st, ww, hh, h, geo, st === 'container' && w.col ? w.col : '#ffffff') : new THREE.MeshLambertMaterial({ color: rgb(w.col ? hexToRgb(w.col) : avg, k), flatShading: true });
     const mesh = new THREE.Mesh(geo, [side, side, g.floorMat, side, side, side]); mesh.position.set(cx, h / 2, cz); mesh.castShadow = h > 3; mesh.receiveShadow = true; grp.add(mesh);
     return grp;
   };

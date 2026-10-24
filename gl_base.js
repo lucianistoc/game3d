@@ -199,6 +199,172 @@ R3D.base = (() => {
     },
   };
 
+  // ---- detailed versions of the outbuildings, defences and utilities (these replace the simple ones above)
+  const frameWin = (p, x, y, z, alongX, w = .78, h = .55) => {   // window with frame, glass, mullion and sill
+    const fr = R3D.mat('#e8e6de'), dx = alongX ? w : .1, dz = alongX ? .1 : w;
+    R3D.mesh(R3D.box(dx + (alongX ? .1 : 0), h + .1, dz + (alongX ? 0 : .1)), fr, x, y, z, p, false);
+    R3D.mesh(R3D.box(alongX ? w * .86 : .13, h, alongX ? .13 : w * .86), g.win, x, y, z, p, false);
+    R3D.mesh(R3D.box(alongX ? .03 : .14, h, alongX ? .14 : .03), fr, x, y, z, p, false);
+  };
+  const cylH = (p, r, h, color, x, y, z, seg = 10) => R3D.mesh(R3D.cyl(r, r, h, seg), R3D.mat(color), x, y + h / 2, z, p);
+  Object.assign(MODELS, {
+    workshop(b, o, p) {
+      const w = b.w, d = b.h, [H, rh] = HT.workshop, k = o.k;
+      blk(p, -.04, 0, -.04, w + .08, .22, d + .08, col('#6a5a50', k));   // plinth
+      blk(p, 0, .22, 0, w, H - .22, d, col('#a05038', k));
+      for (let i = 1; i < 6; i++) blk(p, -.012, .22 + i * .2, -.012, w + .024, .018, d + .024, col('#7a3a28', k));   // brick courses
+      for (const [x, z] of [[0, 0], [w - .14, 0], [0, d - .14], [w - .14, d - .14]]) blk(p, x - .01, 0, z - .01, .16, H, .16, col('#8a4430', k));
+      roofOf(p, w, d, H, rh, col('#7a3a2a', k)); eaves(p, w, d, H, rh, k);
+      // roller door with slats, frame, lamp
+      blk(p, .85, 0, d - .03, 2.3, 1.3, .1, '#e0ddd4'); blk(p, 1, .06, d + .02, 2, 1.2, .06, '#7a7e82'); for (let i = 0; i < 8; i++) blk(p, 1, .08 + i * .15, d + .06, 2, .025, .03, '#52565a');
+      blk(p, 1.9, 1.38, d + .02, .22, .14, .16, '#2a2a2a'); R3D.mesh(R3D.sphere(.06, 8), g.lamp, 2, 1.28, d + .14, p, false);
+      for (let i = 0; i < 3; i++) frameWin(p, w + .03, H * .6, d * (i + .5) / 3, false, .7, .5);
+      frameWin(p, w * .5 + 1.4, H * .6, d + .02, true, .6, .5);
+      cylH(p, .09, .5, '#6a6e72', w * .2, H + rh * .6, d * .6); R3D.mesh(R3D.cyl(.13, .09, .06, 8), R3D.mat('#4a4e52'), w * .2, H + rh * .6 + .5, d * .6, p);   // roof vent stack
+      blk(p, w + .02, .2, 1.1, .5, .35, .7, '#cfd2d4'); cylH(p, .13, .06, '#444', w + .27, .55, 1.45, 8);                  // AC unit
+      cylH(p, .04, H, '#9a9ea2', w + .02, 0, d - .2, 6);                                                                  // downpipe
+      for (let i = 0; i < 6; i++) cylH(p, .07, .5, '#8a5a32', -.4 + (i % 3) * .01, .1 + Math.floor(i / 3) * .15, 4.2 + (i % 3) * .16, 7).rotation.z = Math.PI / 2;   // firewood
+      blk(p, -.9, 0, 5.4, .5, .6, 1.4, '#6a4a2a'); blk(p, -.88, .6, 5.4, .54, .06, 1.44, '#8a6a42'); blk(p, -.8, .66, 5.8, .2, .14, .3, '#3a3d40');   // workbench + vice
+      panels(p, w, d, H, rh, .8, d - .8, 4);
+    },
+    greenhouse(b, o, p) {
+      const w = b.w, d = b.h, [H, rh] = HT.greenhouse, k = o.k, metal = col('#c8d0d4', k);
+      blk(p, -.04, 0, -.04, w + .08, .2, d + .08, col('#7a7f86', k));
+      R3D.mesh(R3D.box(w - .1, H, d - .1), R3D.mat('#bfe6f6', { op: .26 }), w / 2, H / 2 + .2, d / 2, p, false);
+      R3D.mesh(R3D.prism(w, rh, d), R3D.mat('#cdeefb', { op: .3 }), w / 2, H + .2, d / 2, p, false);
+      for (let i = 0; i <= 8; i++) { const x = i * w / 8 - .025; blk(p, x, .2, -.02, .05, H, .05, metal); blk(p, x, .2, d - .03, .05, H, .05, metal); }
+      for (let j = 0; j <= 4; j++) { const z = j * d / 4 - .025; blk(p, -.02, .2, z, .05, H, .05, metal); blk(p, w - .03, .2, z, .05, H, .05, metal); }
+      for (const y of [.5, .85]) { blk(p, -.02, y, 0, .03, .03, d, metal); blk(p, w - .01, y, 0, .03, .03, d, metal); blk(p, 0, y, -.02, w, .03, .03, metal); blk(p, 0, y, d - .01, w, .03, .03, metal); }
+      blk(p, w / 2 - .03, H + rh + .2, 0, .06, .06, d, metal);   // ridge beam
+      for (let i = 0; i <= 4; i++) { const x = i * w / 4; const r1 = R3D.mesh(R3D.box(.04, Math.hypot(w / 2, rh) + .02, .04), R3D.mat(metal), x < w / 2 ? 0 : 0, 0, 0); r1.visible = false; }
+      blk(p, w / 2 - .45, .2, d - .03, .9, H * .95, .05, '#aab4b8'); R3D.mesh(R3D.sphere(.04, 6), R3D.mat('#222'), w / 2 + .3, .75, d + .04, p, false);   // door + handle
+      for (let r = 0; r < 3; r++) {   // raised beds with staked tomato plants and watering pipe
+        const z = .55 + r * ((d - 1.1) / 2.5); blk(p, .35, .2, z - .22, w - .7, .22, .44, '#6a4a2a'); blk(p, .38, .4, z - .19, w - .76, .03, .38, '#3a2a1a');
+        cylH(p, .02, w - .7, '#2a6aa0', .35 + (w - .7) / 2, .5, z + .05, 6).rotation.z = Math.PI / 2;
+        for (let j = 0; j < Math.floor(w - .6); j++) { const hh = .35 + hash(j + b.gx, r + b.gy) * .3, x = .55 + j * (w - 1.1) / Math.max(1, Math.floor(w - .6) - 1); cylH(p, .012, hh + .15, '#7a5a32', x, .42, z, 4); R3D.mesh(R3D.blob(.14, j + r), R3D.mat(k < 1 ? '#4a5a2a' : '#3f9a3a'), x, .42 + hh * .6, z, p); if (k === 1) R3D.mesh(R3D.sphere(.045, 6), R3D.mat('#d03a2a'), x + .08, .42 + hh * .45, z + .06, p, false); }
+      }
+    },
+    gazebo(b, o, p) {
+      const w = b.w, d = b.h, [H, rh] = HT.gazebo, k = o.k;
+      for (let i = 0; i < 6; i++) blk(p, 0, 0, i * d / 6, w, .1, d / 6 - .01, col(i % 2 ? '#8a6a46' : '#7e5e3c', k));   // plank floor
+      for (const [x, z] of [[.1, .1], [w - .1, .1], [.1, d - .1], [w - .1, d - .1]]) { cylH(p, .06, H - .1, col('#8a5a3a', k), x, .1, z, 8); cylH(p, .09, .08, col('#6a4426', k), x, .1, z, 8); cylH(p, .085, .08, col('#6a4426', k), x, H - .08, z, 8); }
+      for (const [x0, z0, x1, z1] of [[.1, .1, w - .1, .1], [.1, d - .1, w - .1, d - .1], [.1, .1, .1, d - .1], [w - .1, .1, w - .1, d - .1]]) { blk(p, Math.min(x0, x1) - .02, .55, Math.min(z0, z1) - .02, Math.abs(x1 - x0) + .04, .05, Math.abs(z1 - z0) + .04, col('#7a4e2c', k)); blk(p, Math.min(x0, x1) - .02, H - .1, Math.min(z0, z1) - .02, Math.abs(x1 - x0) + .04, .1, Math.abs(z1 - z0) + .04, col('#6a4426', k)); }
+      const r = R3D.mesh(R3D.cone(w * .88, rh, 4), R3D.mat(col('#b0452f', k)), w / 2, H + rh / 2, d / 2, p); r.rotation.y = Math.PI / 4;
+      const r2 = R3D.mesh(R3D.cone(w * .9, rh * .1, 4), R3D.mat(col('#8a3322', k)), w / 2, H + .03, d / 2, p); r2.rotation.y = Math.PI / 4; cylH(p, .03, .3, '#d8b030', w / 2, H + rh, d / 2, 6);
+      blk(p, .45, .1, .7, w - .9, .28, .32, col('#6a4a2a', k)); blk(p, .4, .38, .62, w - .8, .05, .45, col('#7a5a36', k));   // bench
+      blk(p, w / 2 - .3, .1, d / 2 + .1, .6, .42, .6, col('#6a4a2a', k)); R3D.mesh(R3D.cyl(.4, .4, .04, 12), R3D.mat('#8a6a42'), w / 2, .55, d / 2 + .4, p);   // table
+      cylH(p, .01, .3, '#222', w / 2, H - .32, d / 2, 4); R3D.mesh(R3D.sphere(.08, 8), g.win, w / 2, H - .36, d / 2, p, false);   // lantern
+    },
+    barn(b, o, p) {
+      const w = b.w, d = b.h, [H, rh] = HT.barn, k = o.k;
+      blk(p, -.03, 0, -.03, w + .06, .25, d + .06, col('#7a746a', k)); blk(p, 0, .25, 0, w, H - .25, d, col('#b0a290', k));
+      for (let i = 1; i < d; i += 1) blk(p, -.012, .25, i, w + .024, H - .25, .02, col('#9a8c7a', k));   // board seams
+      roofOf(p, w, d, H, rh, col('#c4622e', k), .15); eaves(p, w, d, H, rh, k);
+      for (let i = 0; i < 6; i++) frameWin(p, w + .03, H * .6, 1 + i * 3.1 + .4, false, .8, .55);
+      blk(p, w - .02, 0, 14, .08, 1.3, 2.2, '#5a4a38'); blk(p, w - .04, 0, 14, .04, 1.3, .05, '#2a2a2a'); blk(p, w - .04, 0, 15.15, .04, 1.3, .05, '#2a2a2a'); blk(p, w - .04, .6, 14, .04, .05, 2.2, '#2a2a2a');
+      for (let i = 0; i < 4; i++) cylH(p, .05, H + .1, '#8a8e92', w + .02, 0, 4 + i * 5, 6);
+      for (let i = 0; i < 3; i++) blk(p, w + .1, .08 * i, 22 - 0, 0, 0, 0, '#000');
+    },
+    gate(b, o, p) {
+      const w = b.w, lvl = b.lvl || 0, H = 1.15, steel = lvl >= 1, pc = lvl >= 2 ? '#46586a' : '#566a7c';
+      for (const x of [-.05, w - .17]) { blk(p, x, 0, .33, .22, H + .25, .34, '#c8c8c0'); blk(p, x - .03, H + .25, .3, .28, .07, .4, '#a8a8a0'); blk(p, x + .03, .5, .28, .04, .1, .08, '#222'); }
+      for (const half of [0, 1]) {
+        const x0 = .2 + half * (w / 2 - .02), x1 = w / 2 - .05 + half * (w / 2 - .02), hx = half ? x1 : x0;
+        if (steel) { blk(p, x0, .1, .47, x1 - x0, H - .1, .06, pc); for (let i = 0; i < 5; i++) for (const y of [.18, H - .18]) R3D.mesh(R3D.sphere(.02, 5), R3D.mat('#aab'), x0 + (x1 - x0) * (i + .5) / 5, y, .51, p, false); const br = blk(p, x0, .1, .52, Math.hypot(x1 - x0, H - .3), .04, .03, '#8a98a8'); br.rotation.z = Math.atan2(H - .3, x1 - x0); br.position.set((x0 + x1) / 2, H / 2, .52); }
+        else for (let i = 0; i <= 9; i++) { blk(p, x0 + (x1 - x0) * i / 9 - .02, .1, .48, .04, H - .1, .04, '#3a3f46'); R3D.mesh(R3D.cone(.035, .1, 4), R3D.mat('#3a3f46'), x0 + (x1 - x0) * i / 9, H + .04, .5, p); }
+        blk(p, x0, .3, .47, x1 - x0, .05, .06, '#8a98a8'); blk(p, x0, H - .15, .47, x1 - x0, .05, .06, '#8a98a8'); blk(p, hx - .03, .55, .44, .1, .12, .12, '#d8b030');
+        if (lvl >= 2) for (let i = 0; i < 9; i++) R3D.mesh(R3D.cone(.045, .22, 4), R3D.mat('#ccc'), x0 + (x1 - x0) * (i + .5) / 9, H + .08, .5, p);
+        if (lvl >= 3) { for (const i of [0, 1]) blk(p, x0, H + .3 + i * .14, .47, x1 - x0, .035, .035, '#567').material = g.elec; for (let i = 0; i < 4; i++) blk(p, x0 + (x1 - x0) * i / 3 - .02, H + .26, .46, .04, .3, .04, '#eee'); }
+      }
+    },
+    generator(b, o, p) {
+      const k = o.k; blk(p, .08, .1, .12, .84, .6, .76, col('#c8861a', k)); blk(p, .02, .06, .08, .96, .06, .84, '#2a2a2a'); for (const [x, z] of [[.12, .12], [.8, .12], [.12, .8], [.8, .8]]) cylH(p, .06, .08, '#111', x, 0, z, 8);
+      cylH(p, .12, .08, '#a02020', .7, .7, .3, 8); blk(p, .12, .7, .15, .3, .14, .5, '#8a5a10'); cylH(p, .05, .3, '#444', .25, .7, .72, 6); R3D.mesh(R3D.cyl(.07, .07, .05, 8), R3D.mat('#222'), .25, 1.02, .72, p);
+      blk(p, .76, .3, .2, .06, .3, .4, '#222'); R3D.mesh(R3D.sphere(.025, 5), R3D.basic('#3d3'), .8, .56, .3, p, false); blk(p, .84, .12, .55, .12, .26, .1, '#222');
+    },
+    powerbox(b, o, p) {
+      const k = o.k; blk(p, .18, 0, .22, .64, 1.15, .52, col('#cfd4d8', k)); blk(p, .15, 1.15, .2, .7, .06, .56, '#a8acb0'); blk(p, .15, 0, .2, .7, .08, .56, '#7a7e82');
+      for (let i = 0; i < 6; i++) blk(p, .25, .22 + i * .05, .745, .5, .02, .02, '#8a8e92');
+      blk(p, .3, .78, .745, .28, .17, .02, '#0a1a10'); blk(p, .33, .85, .76, .2, .03, .01, '#3d3').material = new THREE.MeshBasicMaterial({ color: '#4f6' }); blk(p, .62, .55, .745, .05, .1, .03, '#555');
+      cylH(p, .04, .9, '#3a3d40', .2, 0, .2, 6); cylH(p, .04, .5, '#3a3d40', .2, 1.0, .2, 6).rotation.z = Math.PI / 2;
+    },
+    well(b, o, p) {
+      const k = o.k; for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; blk(p, .5 + Math.cos(a) * .4 - .1, 0, .5 + Math.sin(a) * .4 - .09, .2, .28, .18, col(i % 2 ? '#8a8d90' : '#797c80', k)).rotation.y = -a; blk(p, .5 + Math.cos(a) * .4 - .1, .28, .5 + Math.sin(a) * .4 - .09, .2, .26, .18, col(i % 2 ? '#797c80' : '#8a8d90', k)).rotation.y = -a; }
+      R3D.mesh(R3D.cyl(.3, .3, .02, 12), R3D.mat('#07151c'), .5, .5, .5, p);
+      for (const x of [.04, .86]) blk(p, x, 0, .44, .1, 1.1, .12, col('#7a5a3a', k)); blk(p, .02, 1.05, .43, .96, .1, .14, col('#6a4a2a', k));
+      const r1 = R3D.mesh(R3D.box(.7, .04, .95), R3D.mat(col('#8a5a3a', k)), .27, 1.28, .5, p); r1.rotation.z = .75; const r2 = R3D.mesh(R3D.box(.7, .04, .95), R3D.mat(col('#8a5a3a', k)), .73, 1.28, .5, p); r2.rotation.z = -.75;
+      cylH(p, .03, .9, '#5a4020', .5, .4, .5, 5).rotation.z = Math.PI / 2; blk(p, .93, .8, .52, .18, .04, .04, '#5a4020'); cylH(p, .06, .12, '#aaa', .5, .38, .5, 8); cylH(p, .008, .5, '#c8b890', .5, .55, .5, 4);
+    },
+    tank(b, o, p) {
+      const k = o.k, c = col('#4a6a8a', k); for (const [x, z] of [[.2, .2], [.8, .2], [.2, .8], [.8, .8]]) blk(p, x - .03, 0, z - .03, .06, .22, .06, '#5a5e62');
+      cylH(p, .4, 1.0, c, .5, .2, .5, 20); for (const y of [.4, .75, 1.05]) R3D.mesh(R3D.cyl(.415, .415, .035, 20), R3D.mat(col('#3a5a7a', k)), .5, y, .5, p);
+      R3D.mesh(R3D.cone(.4, .18, 20), R3D.mat(col('#7aa0c4', k)), .5, 1.29, .5, p); cylH(p, .07, .06, '#222', .5, 1.37, .5, 8);
+      cylH(p, .03, .16, '#222', .5, .28, .93, 6).rotation.x = Math.PI / 2; blk(p, .46, .22, .9, .08, .06, .08, '#c03a2a'); blk(p, .84, .35, .4, .03, .7, .06, '#e8e8e0'); blk(p, .84, .35 + .35, .4, .04, .02, .08, '#3a8ad0');
+    },
+    floodlight(b, o, p) {
+      cylH(p, .13, .06, '#666', .5, 0, .5, 8); cylH(p, .05, 2.3, '#8a8f96', .5, .06, .5, 8); for (const [dx, dz] of [[.17, 0], [-.17, 0], [0, .17], [0, -.17]]) { const br = blk(p, .5 + dx - .015, .1, .5 + dz - .015, .03, .55, .03, '#7a7e84'); br.rotation.z = dz ? 0 : (dx > 0 ? .5 : -.5); br.rotation.x = dx ? 0 : (dz > 0 ? -.5 : .5); }
+      blk(p, .3, 2.3, .3, .4, .06, .4, '#555'); blk(p, .32, 2.36, .55, .36, .26, .22, '#2e3237'); for (let i = 0; i < 4; i++) blk(p, .34 + i * .08, 2.62, .56, .03, .04, .2, '#3a3e44'); blk(p, .34, 2.38, .76, .32, .2, .03, '#fff').material = g.lamp;
+    },
+    wire(b, o, p) {
+      for (const x of [.04, .5, .96]) { cylH(p, .025, .45, '#6a6a6a', x, 0, .5, 6); R3D.mesh(R3D.sphere(.035, 5), R3D.mat('#555'), x, .46, .5, p, false); }
+      for (let i = 0; i < 7; i++) { const t = R3D.mesh(new THREE.TorusGeometry(.14, .012, 5, 12), R3D.mat('#b8b8b8'), .08 + i * .14, .17, .5 + (i % 2 ? .05 : -.05), p, false); t.rotation.y = Math.PI / 2; }
+      for (let i = 0; i < 12; i++) { const sp = R3D.mesh(R3D.box(.012, .06, .012), R3D.mat('#999'), .06 + i * .08, .17 + .14 * ((i % 3) - 1) * .5, .5 + (i % 2) * .08 - .04, p, false); sp.rotation.z = i; }
+    },
+    pit(b, o, p) {
+      blk(p, .05, 0, .05, .9, .03, .9, '#0a0604'); for (const [x, z, w2, d2] of [[0, 0, 1, .07], [0, .93, 1, .07], [0, 0, .07, 1], [.93, 0, .07, 1]]) blk(p, x, 0, z, w2, .08, d2, '#6a5236');
+      for (let i = 0; i < 9; i++) R3D.mesh(R3D.cone(.04, .3, 4), R3D.mat('#9aa0a6'), .2 + (i % 3) * .3, .06, .2 + Math.floor(i / 3) * .3, p, false);
+      for (let i = 0; i < 4; i++) { const br = blk(p, .12 + i * .22, .08, .45, .1, .02, .1, '#6a4a2a'); br.rotation.y = i * .7; }
+    },
+    mine(b, o, p) {
+      cylH(p, .26, .06, '#444', .5, 0, .5, 14); cylH(p, .2, .05, '#6a6e72', .5, .06, .5, 14); for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28; R3D.mesh(R3D.cone(.025, .08, 4), R3D.mat('#222'), .5 + Math.cos(a) * .15, .14, .5 + Math.sin(a) * .15, p, false); }
+      R3D.mesh(R3D.sphere(.04, 6), R3D.basic('#f33'), .5, .12, .5, p, false);
+    },
+    garden(b, o, p) {
+      blk(p, 0, 0, 0, 1, .14, 1, '#6a4a2a'); blk(p, .05, .12, .05, .9, .04, .9, '#3a2a1a');
+      for (let i = 0; i < 6; i++) { const x = .22 + (i % 2) * .56, z = .16 + Math.floor(i / 2) * .34, hh = .22 + hash(b.gx * 3 + i, b.gy) * .2; cylH(p, .012, hh, '#4a7a2a', x, .15, z, 4); for (let l = 0; l < 3; l++) { const lf = R3D.mesh(R3D.box(.14, .01, .06), R3D.mat(o.k < 1 ? '#5a6a2a' : '#3f9a3a'), x + Math.cos(l * 2.1) * .06, .15 + hh * (.5 + l * .15), z + Math.sin(l * 2.1) * .06, p, false); lf.rotation.y = l * 2.1; lf.rotation.z = .3; } R3D.mesh(R3D.sphere(.04, 6), R3D.mat(['#d03a2a', '#e8b030', '#8a3ab0'][i % 3]), x, .15 + hh, z, p, false); }
+    },
+    fence(b, o, p) {
+      const lvl = b.lvl || 0, k = o.k, along = b.dir === 'y', q = new THREE.Group(); q.position.set(.5, 0, .5); if (along) q.rotation.y = Math.PI / 2; p.add(q);
+      const X = (x, y, z, w, h, d, c, op) => R3D.mesh(R3D.box(w, h, d), R3D.mat(c, op), x, y + h / 2, z, q);
+      if (lvl === 0) {
+        const tone = ['#7a5a36', '#6e4f2e', '#85633c'][Math.floor(hash(b.gx, b.gy) * 3)];
+        for (let i = 0; i < 6; i++) { const hh = .7 + hash(b.gx + i, b.gy) * .12; X(-.4 + i * .16, .03, 0, .13, hh, .05, col(i % 2 ? tone : '#6a4a2a', k)); R3D.mesh(R3D.cone(.065, .08, 4), R3D.mat(col(i % 2 ? tone : '#6a4a2a', k)), -.4 + i * .16, .03 + hh + .04, 0, q).rotation.y = Math.PI / 4; }
+        X(0, .18, .045, 1, .06, .04, col('#4a3220', k)); X(0, .5, .045, 1, .06, .04, col('#4a3220', k)); X(-.5, 0, 0, .1, .95, .1, col('#5a3e20', k)); X(-.5, .95, 0, .12, .04, .12, col('#4a3220', k));
+      } else if (lvl === 1) {
+        X(0, .05, 0, 1, .85, .012, col('#c0ccd4', k), { op: .3 });
+        for (let i = 0; i < 6; i++) { const d1 = X(-.4 + i * .17, .05, 0, .012, .95, .014, col('#b8c2ca', k)); d1.rotation.z = .8; }
+        X(0, .9, 0, 1, .04, .04, col('#b8c2ca', k)); X(0, .04, 0, 1, .025, .03, col('#b8c2ca', k)); X(-.5, 0, 0, .06, 1, .06, col('#9aa4ac', k)); R3D.mesh(R3D.sphere(.04, 6), R3D.mat('#9aa4ac'), -.5, 1.02, 0, q);
+      } else {
+        X(0, 0, 0, 1, 1.15, .13, col('#a4a6a8', k)); for (const y of [.3, .6, .9]) X(0, y, .067, 1, .015, .01, '#6a6c6e'); X(0, 0, .067, .02, 1.15, .01, '#6a6c6e'); X(0, 0, 0, 1.0, .1, .16, col('#8a8c8e', k)); X(0, 1.12, 0, 1.02, .06, .16, col('#8a8c8e', k));
+        X(-.5, 0, 0, .12, 1.3, .16, col('#6a6e74', k));
+        if (lvl === 2) { for (let i = 0; i < 4; i++) { const c2 = R3D.mesh(new THREE.TorusGeometry(.07, .008, 4, 10), R3D.mat('#b8b8b8'), -.36 + i * .24, 1.28, 0, q, false); c2.rotation.y = Math.PI / 2; } X(0, 1.22, 0, 1, .015, .015, '#b8b8b8'); X(0, 1.34, 0, 1, .015, .015, '#b8b8b8'); }
+        else { for (const y of [1.28, 1.42]) X(0, y, 0, 1, .03, .03, '#567').material = g.elec; for (const x of [-.5, 0, .5]) X(x - .015, 1.2, 0, .03, .27, .03, '#eee'); X(-.1, .7, .075, .2, .12, .01, '#e8c020'); }
+      }
+    },
+    wall(b, o, p) {
+      const lvl = b.lvl || 0, hh = [.65, .95, 1.2][lvl], t = .34, k = o.k, c = [col('#b9a272', k), col('#9a9ea4', k), col('#4c545e', k)][lvl], top = [col('#d6c08c', k), col('#b6bac0', k), col('#707a85', k)][lvl];
+      const arms = [[0, -1, .5 - t / 2, 0, t, .5 - t / 2], [0, 1, .5 - t / 2, .5 + t / 2, t, .5 - t / 2], [-1, 0, 0, .5 - t / 2, .5 - t / 2, t], [1, 0, .5 + t / 2, .5 - t / 2, .5 - t / 2, t]];
+      const seg = (x, z, w, d) => {
+        if (lvl === 0) { const n = Math.max(2, Math.round(hh / .17)); for (let i = 0; i < n; i++) blk(p, x + (i % 2 ? .02 : -.02) * (w > d ? 1 : 0), i * .17, z + (i % 2 ? .02 : -.02) * (w > d ? 0 : 1), w, .17, d, col(i % 2 ? '#b9a272' : '#a99262', k)); }
+        else if (lvl === 1) { blk(p, x, 0, z, w, hh, d, c); blk(p, x - .02, hh - .08, z - .02, w + .04, .08, d + .04, top); if (w > d) blk(p, x + w / 2 - .012, 0, z - .002, .024, hh, d + .004, '#7a7e84'); else blk(p, x - .002, 0, z + d / 2 - .012, w + .004, hh, .024, '#7a7e84'); }
+        else { blk(p, x, 0, z, w, hh, d, c); for (const y of [.25, .6, .95]) blk(p, x - .008, y, z - .008, w + .016, .04, d + .016, '#3a4048'); }
+      };
+      seg(.5 - t / 2, .5 - t / 2, t, t);
+      for (const [dx, dy, x, z, w, d] of arms) if (nbr(b, dx, dy)) seg(x, z, w, d);
+      blk(p, .5 - t / 2 - .02, hh, .5 - t / 2 - .02, t + .04, .05, t + .04, top);
+      if (lvl === 2) { for (let i = 0; i < 4; i++) R3D.mesh(R3D.cone(.04, .24, 4), R3D.mat('#c8ccd0'), .4 + (i % 2) * .2, hh + .17, .4 + Math.floor(i / 2) * .2, p); for (const [x, z] of [[.36, .36], [.64, .36], [.36, .64], [.64, .64]]) R3D.mesh(R3D.sphere(.018, 5), R3D.mat('#aab'), x, hh * .7, z, p, false); }
+    },
+    turret(b, o, p) {
+      const k = o.k; cylH(p, .42, .1, '#4a4e52', .5, 0, .5, 14); cylH(p, .3, .45, col('#6a3a3a', k), .5, .1, .5, 14); cylH(p, .34, .06, col('#8a8e92', k), .5, .55, .5, 14);
+      for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; blk(p, .5 + Math.cos(a) * .42 - .1, 0, .5 + Math.sin(a) * .42 - .08, .2, .22, .16, '#b9a272').rotation.y = -a; }   // sandbag ring
+      blk(p, .78, .1, .35, .16, .22, .3, '#566a2e'); blk(p, .8, .32, .4, .12, .03, .2, '#d8b050');   // ammo box + belt
+      const head = new THREE.Group(); head.position.set(.5, .78, .5); p.add(head);
+      blk(head, -.26, -.15, -.26, .52, .3, .52, col('#8a4a4a', k)); blk(head, -.26, .15, -.2, .46, .05, .4, col('#6a3a3a', k)); blk(head, -.12, .2, -.1, .24, .14, .2, '#2a2d30');
+      for (const z of [-.1, .1]) { blk(head, .1, -.04, z - .035, .7, .08, .07, '#2a2d30'); blk(head, .78, -.06, z - .05, .1, .12, .1, '#1a1c1e'); }
+      R3D.mesh(R3D.sphere(.06, 8), R3D.mat('#c55', { em: '#c33', ei: .8 }), -.1, .24, .12, head, false); blk(head, -.04, .34, -.2, .02, .1, .02, '#888');
+      p.userData.head = head;
+    },
+  });
   const dmgOf = (frac) => frac < .3 ? 2 : frac < .6 ? 1 : 0;
   const makeBuilding = (b, ghost) => {
     const grp = new THREE.Group(); grp.position.set(b.gx, 0, b.gy);

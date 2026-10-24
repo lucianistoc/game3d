@@ -36,10 +36,11 @@ R3D.mission = (() => {
     g.blastL = new THREE.PointLight('#ffb050', 0, 480, 0); sc.add(g.blastL);
 
     // ground: the pre-rendered floor on the stage, a plain plane around it
-    const outer = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), R3D.mat(indoor ? '#0d1012' : '#2b3a22')); outer.rotation.x = -Math.PI / 2; outer.position.set(SW / 2, -1, SH / 2); outer.receiveShadow = true; sc.add(outer);
-    g.floorCv = m.floor; g.floorTex = R3D.canvasTex(m.floor);
+    g.floorCv = m.floor; g.floorTex = R3D.canvasTex(m.floor); g.floorTex.wrapS = g.floorTex.wrapT = THREE.MirroredRepeatWrapping;
     g.floorMat = new THREE.MeshLambertMaterial({ map: g.floorTex });
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), g.floorMat); floor.rotation.x = -Math.PI / 2; floor.position.set(SW / 2, 0, SH / 2); floor.receiveShadow = true; sc.add(floor);
+    // the floor art fills the stage and is mirrored outwards so the ground reaches the horizon (walls use the middle tile only)
+    const T = 7, fgeo = new THREE.PlaneGeometry(SW * T, SH * T), fuv = fgeo.attributes.uv; for (let i = 0; i < fuv.count; i++) fuv.setXY(i, (fuv.getX(i) - .5) * T + .5, (fuv.getY(i) - .5) * T + .5);
+    const floor = new THREE.Mesh(fgeo, g.floorMat); floor.rotation.x = -Math.PI / 2; floor.position.set(SW / 2, 0, SH / 2); floor.receiveShadow = true; sc.add(floor);
     g.root = new THREE.Group(); sc.add(g.root);
 
     // outer wall ring (indoor) / chain-link fence (lots and depots), with openings where the doors are
@@ -127,14 +128,55 @@ R3D.mission = (() => {
   };
   const hexToRgb = c => { const n = parseInt(c.replace('#', '').padEnd(6, '0').slice(0, 6), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
 
+  // loot is drawn as the thing itself: cans, bottles, ammo boxes, jerrycans, packs, guns...
+  const GEAR_LEN = { pistol: 13, old_rifle: 26, shotgun: 26, smg: 16, hunting: 30, assault: 26 };
   const crateMesh = c => {
     const g = new THREE.Group(), k = c.keys ? 'keys' : c.relay ? 'relay' : c.card ? 'card' : c.drive ? 'drive' : c.k, col = CRATE_COL[k] || '#c8c8d0';
-    if (c.card || c.drive || c.relay || c.keys) { const o = R3D.mesh(R3D.box(c.keys ? 12 : 14, 3, 9), R3D.mat('#1c2a32', { em: col, ei: .7 }), 0, 0, 0, g); o.userData.bob = true; g.add(new THREE.Mesh(R3D.cyl(.8, .8, 26, 6), R3D.basic(col, .5))).position.y = 14; }
-    else if (k === 'gear') { R3D.mesh(R3D.box(16, 11, 12), R3D.mat('#4a2a66', { em: '#8a4ad0', ei: .5 }), 0, 6, 0, g); R3D.mesh(R3D.box(17, 3, 13), R3D.mat('#d8b030'), 0, 11, 0, g); }
-    else { R3D.mesh(R3D.box(c.drop ? 11 : 15, c.drop ? 8 : 12, c.drop ? 11 : 15), R3D.mat(col), 0, c.drop ? 4 : 6, 0, g); R3D.mesh(R3D.box(c.drop ? 12 : 16, 2, c.drop ? 12 : 16), R3D.mat('#222a2e'), 0, c.drop ? 6 : 8, 0, g); }
-    const ring = new THREE.Mesh(new THREE.RingGeometry(14, 16, 24), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .5, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 1; g.add(ring); g.userData.ring = ring;
+    const it = new THREE.Group(); g.add(it);
+    const bx = (w, h, d, color, x, y, z, o) => R3D.mesh(R3D.box(w, h, d), R3D.mat(color, o), x, y + h / 2, z, it);
+    const cy = (r, h, color, x, y, z, o, seg = 10) => R3D.mesh(R3D.cyl(r, r, h, seg), R3D.mat(color, o), x, y + h / 2, z, it);
+    const lay = (m, rz, ry = 0) => { m.rotation.z = rz; m.rotation.y = ry; return m; };
+    if (k === 'food') {
+      for (const [x, z, c2] of [[-5, -2, '#c0392b'], [3, -4, '#d9822b'], [2, 5, '#3a8a4a']]) { cy(3.6, 7, c2, x, 0, z); cy(3.7, 1, '#cfd3d6', x, 7, z); cy(3.7, 1, '#cfd3d6', x, 0, z); }
+      bx(12, 4, 6, '#c8985a', -4, 0, 7).rotation.y = .3;
+    } else if (k === 'water') {
+      for (const x of [-6, 0, 6]) { cy(3.3, 13, '#7ec8f0', x, 0, 0, { op: .75 }); cy(1.6, 3, '#2a6ab0', x, 13, 0); cy(3.3, 4, '#2a6ab0', x, 4, 0, { op: .9 }); }
+    } else if (k === 'ammo') {
+      bx(16, 8, 10, '#566a2e', -2, 0, 0); bx(16.5, 1.5, 10.5, '#3a4a20', -2, 8, 0); bx(3, 3, 1.5, '#aaa', -2, 4, 5.5);
+      for (const x of [8, 11]) { cy(1.2, 5, '#d8b050', x, 0, 8, {}, 6); cy(1, 2.4, '#b87333', x, 5, 8, {}, 6); }
+    } else if (k === 'shells') {
+      for (const [x, z] of [[-6, -3], [-2, 3], [3, -3], [7, 3]]) { cy(2.3, 8, '#c8362a', x, 0, z, {}, 8); cy(2.4, 2.6, '#d8b050', x, 0, z, {}, 8); }
+    } else if (k === 'meds') {
+      bx(16, 10, 11, '#f2f2f2', 0, 0, 0); bx(4, 1, 10, '#d02a2a', 0, 10, 0); bx(10, 1, 4, '#d02a2a', 0, 10, 0); bx(17, 1.5, 11.5, '#cfcfcf', 0, 4.5, 0); bx(4, 3, 1.5, '#888', 0, 7, 6);
+    } else if (k === 'scrap') {
+      for (const [x, z, w, h, d, r, c2] of [[-5, -3, 9, 2, 5, .3, '#8a8f96'], [3, 2, 7, 3, 6, -.5, '#6a6e74'], [-2, 5, 10, 1.5, 3, .9, '#a8acb2'], [6, -4, 4, 6, 4, .2, '#7a5a3a']]) bx(w, h, d, c2, x, 0, z).rotation.y = r;
+      cy(5, 2, '#9aa0a6', -1, 3, -1, {}, 12).rotation.x = .15; cy(1.5, 2.4, '#3a3d40', -1, 3, -1, {}, 8);
+    } else if (k === 'wood') {
+      for (const [y, z] of [[0, -4], [0, 0], [0, 4], [6, -2], [6, 2]]) lay(cy(3.2, 18, '#8a5a32', 0, y + 3, z, {}, 8), Math.PI / 2, 0);
+      for (const [y, z] of [[0, -4], [0, 0], [0, 4], [6, -2], [6, 2]]) { const e = cy(2.4, .5, '#d8b070', 9.1, y + 3, z, {}, 8); e.rotation.z = Math.PI / 2; }
+    } else if (k === 'diesel') {
+      bx(12, 15, 6, '#c8302a', -1, 0, 0); bx(5, 3, 5, '#a02020', -4, 15, 0); cy(1.4, 3, '#e8c020', 3, 15, 0, {}, 8); bx(8, 1.5, 2, '#a02020', -2, 16, 0); bx(7, 5, .6, '#e8e0c0', -1, 5, 3.2);
+    } else if (k === 'gear') {
+      const gi = GEAR_BY_ID[c.g] || {}, gc = gi.col || '#888', sl = gi.slot;
+      if (sl === 'pack') { bx(13, 16, 8, gc, 0, 0, 0); bx(11, 6, 2, shadeHex(gc, .7), 0, 2, 5); bx(10, 3, 8.4, shadeHex(gc, .8), 0, 13, 0); bx(2, 9, 1, '#222', -4, 4, -4.4); bx(2, 9, 1, '#222', 4, 4, -4.4); }
+      else if (sl === 'body') { bx(14, 3, 16, gc, 0, 0, 0); bx(5, 3.2, 8, gc, -9.5, 0, -4).rotation.y = .5; bx(5, 3.2, 8, gc, 9.5, 0, -4).rotation.y = -.5; bx(4, 3.4, 4, shadeHex(gc, .6), 0, 0, -7); bx(.8, 3.4, 14, '#ddd', 0, 0, 0); }
+      else if (sl === 'boots') { for (const x of [-5, 5]) { bx(6, 7, 14, gc, x, 0, 0); bx(6.4, 2, 6, shadeHex(gc, .55), x, 0, -4); bx(6, 4, 6, gc, x, 7, 4); } }
+      else if (sl === 'ranged') { const L = GEAR_LEN[gi.id] || 22; bx(L, 3, 3, '#2a2d30', 0, 2, 0); bx(L * .4, 4, 3.4, '#6a4a2a', -L * .3, 1, 0); bx(3, 7, 3, '#2a2d30', L * .1, -3, 0); if (L > 20) bx(L * .3, 2, 2, '#444', L * .5, 3, 0); it.rotation.y = .6; }
+      else if (sl === 'melee') { const mc = gi.col || '#9aa'; if (gi.id === 'axe') { bx(22, 2.4, 2.4, '#7a5a3a', 0, 1, 0); bx(7, 7, 2, '#c0c4c8', 8, 1, 0); } else if (gi.id === 'machete') { bx(5, 2.4, 2.4, '#222', -9, 1, 0); bx(20, 1.2, 4, '#c0c4c8', 3, 1, 0); } else if (gi.id === 'bat') { lay(cy(1.4, 24, '#b08a5a', 0, 1, 0, {}, 8), Math.PI / 2); } else { bx(24, 2.6, 2.6, mc, 0, 1, 0); bx(3, 2.6, 6, mc, -11, 1, 0); } it.rotation.y = .5; }
+      else { bx(16, 11, 12, '#4a2a66', 0, 0, 0, { em: '#8a4ad0', ei: .5 }); bx(17, 3, 13, '#d8b030', 0, 8, 0); }
+    } else if (c.keys) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(4, .9, 6, 14), R3D.mat('#cfe4ff')); ring.rotation.x = Math.PI / 2; ring.position.set(-4, 1.5, 0); it.add(ring); bx(10, 3, 7, '#1a2a3a', 4, 0, 0, { em: '#7ab8ff', ei: .6 }); bx(5, 3.4, 3, '#7ab8ff', 5, 0, 0, { em: '#7ab8ff', ei: .8 });
+    } else if (c.card) { bx(14, 1.4, 9, '#1c2a32', 0, 0, 0, { em: '#6fe', ei: .5 }); bx(12, 1.6, 2, '#6fe', 0, 0, -1.5, { em: '#6fe', ei: 1 }); bx(5, 1.6, 2, '#6fe', -3, 0, 2, { em: '#6fe', ei: 1 }); }
+    else if (c.drive) { bx(14, 3, 7, '#2a1c3a', 0, 0, 0, { em: '#c8f', ei: .5 }); bx(5, 2, 5, '#cfd3d6', 9, .5, 0); bx(2, 3.4, 4, '#c8f', -3, 0, 0, { em: '#c8f', ei: 1 }); }
+    else if (c.relay) { bx(14, 8, 10, '#1c2a32', 0, 0, 0, { em: '#6fe', ei: .4 }); bx(4, 2, 2, '#6fe', -3, 8, 0, { em: '#6fe', ei: 1 }); bx(4, 2, 2, '#6fe', 3, 8, 0, { em: '#6fe', ei: 1 }); cy(.7, 14, '#6fe', 6, 8, 0, { em: '#6fe', ei: 1 }, 5); }
+    else { bx(15, 12, 15, col, 0, 0, 0); }   // anything unknown stays a plain crate
+    if (c.drop) it.scale.setScalar(.85); else it.scale.setScalar(1.15);
+    it.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    const special = c.keys || c.card || c.drive || c.relay; if (special) { it.position.y = 0; g.userData.float = true; it.traverse(o => { if (o.isMesh && o.userData) o.userData.bob = false; }); it.userData.bob = true; }
+    const ring = new THREE.Mesh(new THREE.RingGeometry(15, 17, 24), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .5, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 1; g.add(ring); g.userData.ring = ring; g.userData.it = it;
     g.rotation.y = ((c.x * 7 + c.y * 3) % 40 - 20) * Math.PI / 180; return g;
   };
+  const shadeHex = (c, k) => '#' + new THREE.Color(c).multiplyScalar(k).getHexString();
 
   const zombieMesh = z => {
     const [s, bulk] = ZLOOK[z.kind] || ZLOOK.walker, skin = ZSKIN[z.kind] || ZSKIN.walker;
@@ -177,8 +219,8 @@ R3D.mission = (() => {
     for (const [w, mesh] of g.walls) if (!seenW.has(w)) { g.root.remove(mesh); g.walls.delete(w); }
     // crates
     sync(g.crates, m.crates, crateMesh, (r, c) => {
-      const bob = c.keys || c.card || c.drive || c.relay ? 13 + Math.sin(t * 3 + c.x) * 2 : 0; r.position.set(c.x, bob, c.y);
-      r.children.forEach(ch => { if (ch.userData.bob) ch.rotation.y = t * 1.6; }); if (r.userData.ring) r.userData.ring.material.opacity = .35 + Math.sin(t * 4 + c.y) * .15;
+      const sp = r.userData.float, bob = sp ? 10 + Math.sin(t * 3 + c.x) * 2 : 0; r.position.set(c.x, bob, c.y);
+      if (sp) r.userData.it.rotation.y = t * 1.6; if (r.userData.ring) r.userData.ring.material.opacity = .35 + Math.sin(t * 4 + c.y) * .15;
     });
     // the infected
     sync(g.zs, m.zombies, zombieMesh, (r, z) => {

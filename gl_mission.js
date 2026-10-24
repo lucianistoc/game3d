@@ -80,6 +80,10 @@ R3D.mission = (() => {
     g.gunId = m.wR.id;
     g.blade.material.color.set(m.wM.col || '#9aa');
     M.decor(m, g);
+    // hotwiring: the car you work on gets its driver door opened, headlights on, sparks, and hazard lights + a siren glow when its alarm is going
+    g.carFx = new THREE.Group(); g.carFx.visible = false; g.ents.add(g.carFx);
+    g.carL = new THREE.SpotLight('#fff2c8', 0, 360, .5, .6, 0); g.scene.add(g.carL, g.carL.target); g.sirenL = new THREE.PointLight('#ff2020', 0, 320, 0); g.scene.add(g.sirenL);
+    g.carRing = new THREE.Mesh(new THREE.RingGeometry(1, 1.05, 48), new THREE.MeshBasicMaterial({ color: '#9fd0ff', transparent: true, opacity: .5, side: THREE.DoubleSide, depthWrite: false })); g.carRing.rotation.x = -Math.PI / 2; g.carRing.position.y = 1; g.carRing.visible = false; g.ents.add(g.carRing);
     g.ready = true; g.lastTown = town;
   };
 
@@ -291,7 +295,8 @@ R3D.mission = (() => {
   };
 
   // a wall as a box: sides take the colour of the art, the top shows the art itself
-  M.wallMesh = (m, g, w, forceH) => {
+  M.wallMesh = (m, g, w, forceH) => { const gp = M.wallMeshRaw(m, g, w, forceH); if (gp.children.length > 2) R3D.merge(gp); return gp; };
+  M.wallMeshRaw = (m, g, w, forceH) => {
     const grp = new THREE.Group(), st = w.style;
     const px = w.x, py = w.y, ww = w.w, hh = w.h, cx = px + ww / 2, cz = py + hh / 2;
     const avg = avgColor(g.floorCv, px, py, ww, hh);
@@ -376,13 +381,14 @@ R3D.mission = (() => {
   const shadeHex = (c, k) => '#' + new THREE.Color(c).multiplyScalar(k).getHexString();
 
   const zombieMesh = z => {
-    const [s, bulk] = ZLOOK[z.kind] || ZLOOK.walker, skin = ZSKIN[z.kind] || ZSKIN.walker;
-    const h = R3D.humanoid({ skin, shirt: z.kind === 'spitter' ? '#566a2a' : CLOTH[z.vi % CLOTH.length], pants: '#303236', hat: z.kind === 'armored' ? '#40464c' : skin, extra: '#3a4046', scale: s, bulk, pose: 'zombie', belly: z.kind === 'spitter', plates: z.kind === 'armored', lean: z.kind === 'runner' ? .22 : 0 });
+    const [s, bulk] = ZLOOK[z.kind] || ZLOOK.walker, base = ZSKIN[z.kind] || ZSKIN.walker, L = R3D.zombieLook(z.kind, ((z.vi * 7 + Math.floor(z.wob * 13)) % 17) / 17, (z.wob * 3.7) % 1);
+    const skin = z.kind === 'walker' || z.kind === 'runner' ? L.skin : base, hat = z.kind === 'armored' ? '#40464c' : L.bald && L.variant === 'plain' ? skin : L.hair;
+    const h = R3D.humanoid({ skin, shirt: z.kind === 'spitter' && L.variant === 'plain' ? '#566a2a' : L.shirt, pants: L.pants, hat, extra: '#3a4046', variant: z.kind === 'armored' ? undefined : L.variant, scale: s, bulk, pose: 'zombie', belly: z.kind === 'spitter', plates: z.kind === 'armored', lean: z.kind === 'runner' ? .22 : 0 });
     for (const sg of [-1, 1]) { const e = new THREE.Mesh(R3D.box(.02, .025, .03), R3D.basic('#ff2a1e')); e.position.set(.07, .016, sg * .04); h.userData.head.add(e); }
     if (z.kind === 'mutant') { for (const sg of [-1, 1]) { const sp = new THREE.Mesh(R3D.cone(.03, .14, 5), R3D.mat('#d8cfae')); sp.position.set(0, .12, sg * .07); h.userData.head.add(sp); } }
     return h;
   };
-  const humanMesh = h => R3D.humanoid({ skin: '#c89a74', shirt: h.leader ? '#6a1a1a' : '#8a4a28', pants: '#2a2420', hat: '#2a2420', extra: '#5a2a1a', scale: h.leader ? 46 : 40, bulk: h.leader ? 1.25 : 1, gun: h.leader ? 'assault' : 'old_rifle', pose: 'aim', twoHand: true });
+  const humanMesh = h => R3D.humanoid({ skin: '#c89a74', shirt: h.leader ? '#6a1a1a' : '#8a4a28', pants: '#2a2420', hat: h.leader ? '#15110e' : ['#2a2420', '#3a2a1a', '#15110e'][Math.floor(h.wa * 3) % 3], variant: h.leader ? 'leader' : 'raider', extra: '#5a2a1a', scale: h.leader ? 46 : 40, bulk: h.leader ? 1.25 : 1, gun: h.leader ? 'assault' : 'old_rifle', pose: 'aim', twoHand: true });
   const npcMesh = () => R3D.humanoid({ skin: '#caa07a', shirt: '#c0792b', pants: '#3a3a40', hat: '#5a3a1a', scale: 38, pose: 'idle' });
 
   const sync = (map, list, make, upd) => {
@@ -471,6 +477,30 @@ R3D.mission = (() => {
     // cracks that have not collapsed yet
     g.cracks.begin(); for (const c of m.cracks || []) if (c.st === 'idle') g.cracks.next().position.set(c.x, 0, c.y); g.cracks.end();
 
+    // the car being worked on / that is shrieking / that is within reach
+    { const alarm = m.walls.find(w => w.style === 'car' && w.alarmOn && !w.taken), tgt = (m.hot && m.hot.car) || alarm || m.nearCar;
+      if (tgt !== g.fxFor) {
+        g.fxFor = tgt; while (g.carFx.children.length) g.carFx.remove(g.carFx.children[0]);
+        if (tgt) {
+          const long = tgt.w >= tgt.h, L = long ? tgt.w : tgt.h, Wd = long ? tgt.h : tgt.w, y0 = Wd * .16, fx = g.carFx;
+          fx.position.set(tgt.x + tgt.w / 2, 0, tgt.y + tgt.h / 2); fx.rotation.y = long ? 0 : Math.PI / 2;
+          const dr = new THREE.Group(); dr.position.set(L * .28, y0, Wd / 2); fx.add(dr); const col = tgt.burnt ? '#1c1a18' : (tgt.col || '#666');
+          dr.add(R3D.mesh(R3D.box(L * .24, Wd * .3, .07), R3D.mat(col), -L * .12, Wd * .15, 0)); dr.add(R3D.mesh(R3D.box(L * .2, Wd * .16, .09), R3D.mat('#27333f'), -L * .12, Wd * .38, 0, null, false)); g.door = dr;
+          g.beams = []; for (const sz of [-1, 1]) { const bm = new THREE.Mesh(new THREE.ConeGeometry(Wd * .45, 90, 14, 1, true), new THREE.MeshBasicMaterial({ color: '#fff2b0', transparent: true, opacity: .16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); bm.rotation.z = Math.PI / 2; bm.position.set(L / 2 + 45, Wd * .3, sz * Wd * .3); fx.add(bm); g.beams.push(bm); }
+          g.blink = []; for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const bl = new THREE.Mesh(R3D.box(3, 3, 3), new THREE.MeshBasicMaterial({ color: '#ffa020' })); bl.position.set(sx * (L / 2 + 1), Wd * .3, sz * (Wd / 2 - 1)); fx.add(bl); g.blink.push(bl); }
+          g.spark = new THREE.Mesh(R3D.box(2.4, 2.4, 2.4), new THREE.MeshBasicMaterial({ color: '#ffe080' })); g.spark.position.set(L * .12, Wd * .34, Wd * .16); fx.add(g.spark); g.fxDims = { L, Wd };
+        }
+      }
+      g.carFx.visible = !!tgt; g.carRing.visible = !!(m.nearCar && !m.hot);
+      if (tgt) {
+        const hot = m.hot && m.hot.car === tgt, k = hot ? Math.min(1, m.hot.t / .6) : 0, { L, Wd } = g.fxDims, cx = tgt.x + tgt.w / 2, cz = tgt.y + tgt.h / 2, long = tgt.w >= tgt.h;
+        g.door.rotation.y = k * 1.05; const lit = hot && m.hot.t > .8 || tgt.alarmOn;
+        g.beams.forEach(b => b.visible = lit); g.spark.visible = hot && Math.sin(t * 60) > -.2; g.blink.forEach((b, i) => b.visible = !!tgt.alarmOn && Math.sin(t * 14) > 0);
+        const fwdX = long ? 1 : 0, fwdZ = long ? 0 : -1; g.carL.position.set(cx + fwdX * L * .5, 14, cz + fwdZ * L * .5); g.carL.target.position.set(cx + fwdX * 200, 0, cz + fwdZ * 200); g.carL.intensity = lit ? 6 : 0; g.carL.target.updateMatrixWorld();
+        g.sirenL.position.set(cx, 30, cz); if (tgt.alarmOn) { g.sirenL.color.set(Math.sin(t * 12) > 0 ? '#ff2020' : '#2060ff'); g.sirenL.intensity = 5; } else g.sirenL.intensity = 0;
+        if (g.carRing.visible) { g.carRing.position.set(cx, 1, cz); g.carRing.scale.set(tgt.w * .75 + 8, tgt.h * .75 + 8, 1); g.carRing.material.opacity = .35 + Math.sin(t * 5) * .15; }
+      } else { g.carL.intensity = 0; g.sirenL.intensity = 0; }
+    }
     // street lamps: lit at night, the two nearest also light the ground
     if (g.lampMat) { g.lampMat.emissiveIntensity = night ? 1.6 : 0; const near = g.lamps.slice().sort((a, b) => Math.hypot(a.x - p.x, a.z - p.y) - Math.hypot(b.x - p.x, b.z - p.y)); g.lampL.forEach((L, i) => { const q = near[i]; if (q && night) { L.position.set(q.x, 60, q.z); L.intensity = 3.2; } else L.intensity = 0; }); }
     // lighting follows the player

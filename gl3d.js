@@ -39,6 +39,51 @@ const R3D = (() => {
     return new THREE.Vector3(o.x + d.x * t, h, o.z + d.z * t);
   };
 
+  // ---------------------------------------------------------------- batching: fold a group's static meshes into one mesh per material
+  // (hundreds of tiny parts were hundreds of draw calls, twice over with shadows). opts.skip(mesh) keeps a mesh out;
+  // opts.direct merges only the group's own children (used per joint of a character, so the joints still move).
+  R.merge = (root, opts = {}) => {
+    root.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(), rel = new THREE.Matrix4(), buckets = new Map(), dead = [];
+    root.traverse(o => {
+      if (!o.isMesh || o === root || !o.geometry.attributes.position || !o.material || !o.material.isMaterial) return;
+      if (opts.direct && o.parent !== root) return; if (opts.skip && opts.skip(o)) return;
+      const key = o.material.uuid + (o.castShadow ? 'c' : '') + (o.receiveShadow ? 'r' : '');
+      let b = buckets.get(key); if (!b) { b = { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, pos: [], nor: [], n: 0 }; buckets.set(key, b); }
+      rel.multiplyMatrices(inv, o.matrixWorld);
+      const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(rel);
+      b.pos.push(g.attributes.position.array); b.nor.push(g.attributes.normal.array); b.n += g.attributes.position.array.length; g.dispose(); dead.push(o);
+    });
+    for (const o of dead) o.parent.remove(o);
+    for (const b of buckets.values()) {
+      const pos = new Float32Array(b.n), nor = new Float32Array(b.n); let at = 0;
+      for (let i = 0; i < b.pos.length; i++) { pos.set(b.pos[i], at); nor.set(b.nor[i], at); at += b.pos[i].length; }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      const m = new THREE.Mesh(geo, b.mat); m.castShadow = b.cast; m.receiveShadow = b.recv; m.userData.own = true; root.add(m);
+    }
+    return root;
+  };
+
+  // Merge meshes from many groups into world-space batches (one mesh per material). The originals are left in place, hidden,
+  // so they can still be picked with a ray. Returns a group to add to the scene.
+  R.batch = meshes => {
+    const out = new THREE.Group(), buckets = new Map();
+    for (const o of meshes) {
+      o.updateWorldMatrix(true, false);
+      const key = o.material.uuid + (o.castShadow ? 'c' : '') + (o.receiveShadow ? 'r' : '');
+      let b = buckets.get(key); if (!b) { b = { mat: o.material, cast: o.castShadow, recv: o.receiveShadow, pos: [], nor: [], n: 0 }; buckets.set(key, b); }
+      const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(o.matrixWorld);
+      b.pos.push(g.attributes.position.array); b.nor.push(g.attributes.normal.array); b.n += g.attributes.position.array.length; g.dispose();
+    }
+    for (const b of buckets.values()) {
+      const pos = new Float32Array(b.n), nor = new Float32Array(b.n); let at = 0;
+      for (let i = 0; i < b.pos.length; i++) { pos.set(b.pos[i], at); nor.set(b.nor[i], at); at += b.pos[i].length; }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      const m = new THREE.Mesh(geo, b.mat); m.castShadow = b.cast; m.receiveShadow = b.recv; m.userData.own = true; out.add(m);
+    }
+    return out;
+  };
+
   // ---------------------------------------------------------------- materials and geometry caches
   const mats = new Map(), geos = new Map();
   R.mat = (color, o = {}) => {
@@ -141,13 +186,41 @@ const R3D = (() => {
     if (o.plates) { bx(.17, .26, .3, 'extra', 0, .16, 0, upper); for (const sg of [-1, 1]) part(R.sphere(.06, 8), 'extra', 0, .3, sg * .155, upper, 1, .7, 1); bx(.19, .09, .19, 'extra', .004, .04, 0, head); }
     if (!zomb && !o.plates) bx(.04, .08, .05, 'extra', .02, .02, -.1, upper);   // pouch / holster on the belt
     if (zomb) { for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; bx(.03, .06 + (i % 2) * .03, .012, 'shirt', Math.cos(a) * .075, -.01, Math.sin(a) * .125, upper).rotation.z = (i % 2 ? .1 : -.1); } bx(.02, .09, .09, 'blood', .082, .17, -.04, upper); bx(.02, .06, .06, 'dark', .082, .13, .07, upper); }
+    // outfits: accessories and colours per variant (office, gown, vest, police, soldier, hoodie, coat, medic, hardhat, strawhat, chef, raider, leader)
+    const vt = o.variant, hemi = (r, mat, x, y, z, par, sy = 1) => part(new THREE.SphereGeometry(r, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), mat, x, y, z, par, 1, sy, 1);
+    if (vt === 'office') { M('v1', '#8a1a1a'); bx(.012, .15, .035, 'v1', .081, .19, 0, upper); bx(.016, .04, .04, 'v1', .082, .28, 0, upper); }
+    else if (vt === 'vest') { M('v1', '#e8742a'); M('v2', '#d8d8c8'); bx(.176, .2, .294, 'v1', 0, .17, 0, upper); for (const y of [.12, .2]) bx(.18, .022, .298, 'v2', 0, y, 0, upper); }
+    else if (vt === 'gown') { M('v1', '#a8c8e0'); part(R.cyl(.1, .135, .26, 12), 'v1', 0, -.05, 0, upper, 1, 1, 1.35); }
+    else if (vt === 'police') { M('v1', '#d8b030'); M('v2', '#15202e'); bx(.03, .03, .012, 'v1', .08, .24, -.06, upper); for (const sg of [-1, 1]) bx(.05, .012, .06, 'v2', 0, .315, sg * .14, upper); bx(.012, .02, .03, 'v1', .084, .045, 0, head); }
+    else if (vt === 'soldier') { M('v1', '#4a5a3a'); M('v2', '#2a3220'); hemi(.092, 'v1', -.004, .005, 0, head, 1.05); bx(.03, .012, .17, 'v2', .0, .05, 0, head); for (const z of [-.07, 0, .07]) bx(.03, .07, .05, 'v2', .095, .14, z, upper); }
+    else if (vt === 'hoodie') { M('v1', o.shirt || '#555'); part(R.sphere(.092, 10), 'v1', -.02, 0, 0, head, 1, 1.02, 1.05); bx(.07, .06, .2, 'v1', .07, .12, 0, upper); }
+    else if (vt === 'coat') { M('v1', '#f2f2f0'); part(R.cyl(.1, .135, .3, 12), 'v1', 0, -.02, 0, upper, .95, 1, 1.4); }
+    else if (vt === 'medic') { M('v1', '#f2f2f0'); M('v2', '#d02a2a'); part(R.cyl(.1, .135, .3, 12), 'v1', 0, -.02, 0, upper, .95, 1, 1.4); bx(.012, .07, .02, 'v2', .1, .12, .09, upper); bx(.012, .02, .07, 'v2', .1, .12, .09, upper); }
+    else if (vt === 'hardhat') { M('v1', '#f0c020'); hemi(.088, 'v1', -.004, .012, 0, head); bx(.05, .01, .17, 'v1', .075, .02, 0, head); bx(.14, .03, .04, 'dark', 0, .09, 0, upper); }
+    else if (vt === 'strawhat') { M('v1', '#d8c070'); part(R.cyl(.14, .14, .01, 14), 'v1', 0, .05, 0, head); hemi(.08, 'v1', 0, .05, 0, head); }
+    else if (vt === 'chef') { M('v1', '#fafafa'); part(R.cyl(.06, .07, .09, 10), 'v1', 0, .12, 0, head); part(R.sphere(.075, 8), 'v1', 0, .18, 0, head); bx(.012, .2, .2, 'v1', .08, .13, 0, upper); }
+    else if (vt === 'raider' || vt === 'leader') {
+      const lead = vt === 'leader'; M('v1', lead ? '#5a1414' : '#4a3322'); M('v2', '#c8c8c8'); M('v3', '#a02020');
+      bx(.172, .24, .288, 'v1', 0, .16, 0, upper); for (const sg of [-1, 1]) for (let i = 0; i < (lead ? 3 : 2); i++) { const sp = part(R.cone(.018, .07, 5), 'v2', 0, .33, sg * (.145 + i * .004), upper); sp.rotation.x = sg * (.5 + i * .35); sp.position.set(-.02 + i * .03, .335, sg * (.15 + i * .018)); }
+      part(R.cyl(.08, .08, .035, 12), 'v3', 0, .035, 0, head); bx(.04, .04, .03, 'v3', -.085, .03, 0, head);
+      if (lead) { bx(.02, .05, .1, 'dark', .075, -.035, 0, head); for (let i = -2; i <= 2; i++) bx(.008, .02, .008, 'v2', .088, -.045, i * .018, head); bx(.05, .03, .12, 'dark', 0, .09, 0, head); }
+    }
     // gun
     let gun = null;
     if (o.gun) { gun = new THREE.Group(); gun.position.set(0, -.165, 0); elbowR.add(gun); gun.userData.metal = own.metal; gun.userData.wood = own.wood; gunBuild(gun, typeof o.gun === 'string' ? o.gun : 'old_rifle'); }
+    for (const pv of [legL, kneeL, legR, kneeR, armL, elbowL, armR, elbowR, head, upper]) R.merge(pv, { direct: true });   // fewer meshes per person, joints still move
     const s = o.scale || 1, bxs = o.bulk || 1; root.scale.set(s * bxs, s, s * bxs);
     root.userData = { own, body, upper, legL, legR, kneeL, kneeR, armL, armR, elbowL, elbowR, head, gun, mats: Object.values(own), lean: o.lean || 0, pose: o.pose || 'idle', setGun: id => { if (gun) gunBuild(gun, id); } };
     return root;
   };
+  // a zombie's clothes, skin and hair, picked from two numbers so the same zombie always looks the same
+  R.zombieLook = (kind, a, b) => {
+    const pick = (list, t) => list[Math.floor(t * list.length) % list.length], skins = ['#7d9468', '#8a9a78', '#9aa088', '#788a6c', '#8a8a7a', '#6a7a60'], hairs = ['#2a2018', '#5a4030', '#8a7a5a', '#c8c0a0', '#1a1a1a'];
+    const var0 = { walker: ['office', 'gown', 'vest', 'police', 'soldier', 'hoodie', 'coat', 'hardhat', 'plain', 'plain', 'plain', 'plain'], runner: ['hoodie', 'hoodie', 'plain', 'vest', 'plain'], brute: ['vest', 'plain', 'plain', 'hardhat'], spitter: ['gown', 'coat', 'plain'], armored: ['soldier'], mutant: ['plain'] }[kind] || ['plain'];
+    const variant = pick(var0, a), cl = { office: '#d8d8d4', gown: '#c8d8e4', vest: '#5a5348', police: '#2a3a52', soldier: '#5a6a48', hoodie: pick(['#6a3a3a', '#3a4a6a', '#4a5a3a', '#555'], b), coat: '#d8d8d4', hardhat: '#6a5a3a', plain: pick(['#5a5348', '#3f4a56', '#6a4a3a', '#4a5a4a', '#6a6a6a', '#4a3a5a'], b) }[variant];
+    return { variant, shirt: cl, pants: variant === 'police' ? '#1c2230' : variant === 'soldier' ? '#4a5a3a' : variant === 'office' ? '#2a2e38' : '#303236', skin: pick(skins, b * 7.3), hair: pick(hairs, a * 5.1), bald: b > .8 };
+  };
+
   // ph = walk phase, mv = 0..1 how fast the legs move
   R.pose = (g, ph, mv, extra = {}) => {
     const u = g.userData, a = ph * 6.2, sw = Math.sin(a) * mv, cs = Math.cos(a) * mv, pose = extra.pose || u.pose;
@@ -221,7 +294,7 @@ const R3D = (() => {
       for (let k = 0; k < 5; k++) { const sp = R.mesh(R.box(wr * 1.0, wr * .12, Wd * .17), R.mat(burnt ? '#111' : '#7a8088'), x * L, wr, wz + sz * .006, g, false); sp.rotation.z = k * Math.PI / 5; }
       R.mesh(R.cyl(wr * .14, wr * .14, Wd * .18, 6), R.mat('#2a2c30'), x * L, wr, wz + sz * .01, g, false).rotation.x = Math.PI / 2;
     }
-    return g;
+    return R.merge(g);
   };
 
   // ---------------------------------------------------------------- particles (one Points object, a fixed pool)

@@ -57,6 +57,7 @@ R3D.base = (() => {
     for (const [x, y] of BUSHES) for (let i = 0; i < 3; i++) { const bu = R3D.mesh(R3D.blob(.34 - i * .04, i + 9), R3D.mat(['#3a7a32', '#2f6a2a', '#44883a'][i]), x * GSCALE + Math.cos(i * 2.1) * .28, .28, y * GSCALE + Math.sin(i * 2.1) * .28, sc); }
     for (const [x, y] of PILES) { const p = new THREE.Group(); p.position.set(x * GSCALE, 0, y * GSCALE); for (let i = 0; i < 4; i++) R3D.mesh(R3D.box(1.1, .08, .6), R3D.mat('#d8d6b8'), 0, .06 + i * .09, 0, p).rotation.y = i * .1; R3D.mesh(R3D.box(.7, .25, .4), R3D.mat('#3a6a8a'), 1.1, .35, .1, p); sc.add(p); }
     for (const [x, y, c] of CATS) { const k = new THREE.Group(); k.position.set(x * GSCALE, 0, y * GSCALE); R3D.mesh(R3D.box(.34, .16, .14), R3D.mat(c), 0, .12, 0, k); R3D.mesh(R3D.box(.14, .14, .14), R3D.mat(c), .2, .2, 0, k); sc.add(k); }
+    { const keep = new Set(sc.children.filter(c => c.isGroup)); const scen = new THREE.Group(); for (const c of keep) { sc.remove(c); scen.add(c); } scen.updateMatrixWorld(true); R3D.merge(scen); sc.add(scen); }   // trees, bushes, piles, cats: one batch
     g.bldRoot = new THREE.Group(); sc.add(g.bldRoot); g.ents = new THREE.Group(); sc.add(g.ents);
 
     // pools
@@ -371,6 +372,7 @@ R3D.base = (() => {
     const fn = MODELS[b.t]; if (!fn) return grp;
     const frac = b.t === 'house' ? save.houseHp / 100 : b.hp / maxHp(b), d = ghost ? 0 : dmgOf(frac);
     fn(b, { k: d === 2 ? .55 : d === 1 ? .78 : 1 }, grp);
+    if (!ghost) { const hd = grp.userData.head; R3D.merge(grp, { skip: hd ? o => { for (let q = o.parent; q; q = q.parent) if (q === hd) return true; return false; } : null }); }
     if (ghost) grp.traverse(c => { if (c.isMesh) { const m = c.material.clone(); m.transparent = true; m.opacity = Math.min(m.opacity, .6); m.depthWrite = false; c.material = m; c.castShadow = false; c.userData.own = true; } });
     return grp;
   };
@@ -381,15 +383,24 @@ R3D.base = (() => {
     return s;
   };
 
+  // All static building parts are drawn from one batch (a handful of draw calls); the per-building meshes stay, hidden, for picking.
+  const rebuildBatch = () => {
+    g.dirty = false; if (g.batch) { g.scene.remove(g.batch); R3D.disposeTree(g.batch); }
+    const list = [];
+    for (const r of g.recs.values()) { r.grp.updateMatrixWorld(true); const hd = r.head; r.grp.traverse(o => { if (!o.isMesh) return; let inHead = false; for (let q = o.parent; q; q = q.parent) if (q === hd) inHead = true; if (inHead) return; o.visible = false; list.push(o); }); }
+    g.batch = R3D.batch(list); g.scene.add(g.batch);
+  };
+
   // vehicles parked on the street
   const makeVehicle = v => R3D.vehicle(v.type, v.color || '#2f4a7a', VEHICLE_TYPES[v.type].len * GSCALE, 1.2);
-  const crewMesh = c => R3D.humanoid({ skin: '#caa07a', shirt: ROLES[c.role] ? ROLES[c.role].color : '#8a8', pants: '#2f3440', hat: '#3a3a40', scale: 1.15, pose: 'idle' });
+  const ROLE_LOOK = { fighter: { variant: 'soldier', shirt: '#5a6a48', pants: '#3a4a30' }, engineer: { variant: 'hardhat', shirt: '#e8742a', pants: '#2a2e38' }, medic: { variant: 'medic', shirt: '#f2f2f0', pants: '#2a2e38' }, farmer: { variant: 'strawhat', shirt: '#6a8a3a', pants: '#3a4a6a' }, scout: { variant: 'hoodie', shirt: '#3a5a6a', pants: '#2a3a30' }, mechanic: { variant: 'vest', shirt: '#3a4a6a', pants: '#2a2e38' }, cook: { variant: 'chef', shirt: '#f2f2f0', pants: '#2a2a30' } };
+  const crewMesh = c => R3D.humanoid({ skin: ['#caa07a', '#e0b890', '#a8785a', '#8a5a3a'][c.name.length % 4], hat: ['#2a2018', '#5a4030', '#8a7a5a', '#1a1a1a'][c.name.charCodeAt(0) % 4], pants: '#2f3440', ...(ROLE_LOOK[c.role] || {}), scale: 1.15, pose: 'idle' });
   const ZB = { walker: [1.15, 1], runner: [1.1, .95], brute: [1.5, 1.45], spitter: [1.15, 1.05], armored: [1.22, 1.12] };
   const ZSKIN = { walker: '#7d9468', brute: '#8c946a', runner: '#a3ad84', spitter: '#97c93f', armored: '#6f8a6c' };
   const CLOTH = ['#5a5348', '#3f4a56', '#6a4a3a', '#4a5a4a', '#6a6a6a', '#4a3a5a'];
   const attackerMesh = z => {
-    if (z.raider) return R3D.humanoid({ skin: '#c89a74', shirt: '#8a4a28', pants: '#2a2420', hat: '#2a2420', scale: 1.2, gun: 'old_rifle', pose: 'aim', twoHand: true });
-    const [s, bulk] = ZB[z.kind] || ZB.walker, skin = ZSKIN[z.kind] || ZSKIN.walker, h = R3D.humanoid({ skin, shirt: z.kind === 'spitter' ? '#566a2a' : CLOTH[Math.floor(z.ph * 6) % 6], pants: '#303236', hat: z.kind === 'armored' ? '#40464c' : skin, extra: '#3a4046', scale: s, bulk, pose: 'zombie', belly: z.kind === 'spitter', plates: z.kind === 'armored', lean: z.kind === 'runner' ? .22 : 0 });
+    if (z.raider) return R3D.humanoid({ skin: '#c89a74', shirt: '#8a4a28', pants: '#2a2420', hat: ['#2a2420', '#3a2a1a', '#15110e'][Math.floor(z.ph * 3) % 3], variant: 'raider', scale: 1.2, gun: 'old_rifle', pose: 'aim', twoHand: true });
+    const [s, bulk] = ZB[z.kind] || ZB.walker, base = ZSKIN[z.kind] || ZSKIN.walker, L = R3D.zombieLook(z.kind, z.ph, (z.ph * 7.7) % 1), skin = z.kind === 'walker' || z.kind === 'runner' ? L.skin : base, h = R3D.humanoid({ skin, shirt: z.kind === 'spitter' && L.variant === 'plain' ? '#566a2a' : L.shirt, pants: L.pants, hat: z.kind === 'armored' ? '#40464c' : L.bald && L.variant === 'plain' ? skin : L.hair, variant: z.kind === 'armored' ? undefined : L.variant, extra: '#3a4046', scale: s, bulk, pose: 'zombie', belly: z.kind === 'spitter', plates: z.kind === 'armored', lean: z.kind === 'runner' ? .22 : 0 });
     for (const sg of [-1, 1]) { const e = new THREE.Mesh(R3D.box(.02, .025, .03), R3D.basic('#ff2a1e')); e.position.set(.07, .016, sg * .04); h.userData.head.add(e); }
     return h;
   };
@@ -417,6 +428,7 @@ R3D.base = (() => {
 
   // ---------------------------------------------------------------- camera
   B.fit = () => { if (!g) init(); g.tx = GX / 2 - 1; g.tz = GY / 2 + 1; g.dist = Math.max(30, Math.min(60, 62 * Math.min(1.15, innerWidth / innerHeight) ** -.3)); g.yaw = .55; g.pitch = .95; };
+  B.scene = () => g && g.scene;
   B.look = (x, z) => { if (!g) init(); g.tx = x; g.tz = z; };
   B.zoom = f => { if (!g) init(); g.dist = Math.max(8, Math.min(90, g.dist / f)); };
   B.camUpdate = (sc, dt) => {
@@ -458,7 +470,7 @@ R3D.base = (() => {
     const seen = new Set(); let flood = 0;
     for (const b of save.buildings) {
       seen.add(b); const sig = sigOf(b); let r = g.recs.get(b);
-      if (!r || r.sig !== sig) { if (r) { g.bldRoot.remove(r.grp); R3D.disposeTree(r.grp); } const grp = makeBuilding(b); grp.userData.b = b; r = { grp, sig, head: grp.userData.head }; g.recs.set(b, r); g.bldRoot.add(grp); }
+      if (!r || r.sig !== sig) { g.dirty = true; if (r) { g.bldRoot.remove(r.grp); R3D.disposeTree(r.grp); } const grp = makeBuilding(b); grp.userData.b = b; r = { grp, sig, head: grp.userData.head }; g.recs.set(b, r); g.bldRoot.add(grp); }
       if (b.t === 'turret' && r.head) {
         let tgt = null, td = 99; if (raid) for (const z of raid.zombies) { const d = Math.hypot(z.x - b.gx - .5, z.y - b.gy - .5); if (d < td && d < 10) { td = d; tgt = z; } }
         if (tgt) r.head.rotation.y = -Math.atan2(tgt.y - b.gy - .5, tgt.x - b.gx - .5);
@@ -467,7 +479,8 @@ R3D.base = (() => {
     }
     for (; flood < 4; flood++) g.flood[flood].intensity = 0;
     g.lamp.emissiveIntensity = lit && powered ? 1.3 : 0;
-    for (const [b, r] of g.recs) if (!seen.has(b)) { g.bldRoot.remove(r.grp); R3D.disposeTree(r.grp); g.recs.delete(b); }
+    for (const [b, r] of g.recs) if (!seen.has(b)) { g.bldRoot.remove(r.grp); R3D.disposeTree(r.grp); g.recs.delete(b); g.dirty = true; }
+    if (g.dirty) rebuildBatch();
     // the house burns when it is nearly gone
     const fires = [];
     if (save.houseHp < 30) { const h = save.buildings.find(b => b.t === 'house'); if (h) fires.push([h.gx + 1, 2.4, h.gy + 3, 1.3], [h.gx + 3, 2.2, h.gy + 6, 1.1]); }

@@ -15,7 +15,7 @@ function missionScene(town, mode = 'drive', opts = {}) {
     time: (mode === 'walk' ? 45 : 75) + scoutBonus(), spawnT: 8, shotT: 0, meleeT: 0, done: null, doneT: 0,
     danger: siteDanger(town),
   };
-  m.town = town; m.trip = tripHours(town, mode); m.night = arriveClock(town, mode) >= 19.5;
+  m.town = town; m.trip = tripHours(town, mode); m.arr = arriveClock(town, mode); m.time0 = m.time; m.night = m.arr >= 19.5;
   m.humans = []; m.ebullets = []; m.gained = []; m.wrecked = null; m.fullT = 0;
   m.veh = mode === 'drive' ? veh() : null; m.cap = m.veh ? VEHICLE_TYPES[m.veh.type].cap : WALK.cap;
   m.gear = gearStats(); m.cap += m.gear.cap; m.armor = m.gear.armor; m.speedMul = 1 + m.gear.speed;
@@ -110,9 +110,9 @@ function missionScene(town, mode = 'drive', opts = {}) {
   };
 
   // ---------------------------------------------------------------- touch controls: a stick on the left, buttons on the right, touch anywhere else to aim and fire
-  const TBTN = () => [['melee', W - 80, H - 190, 'HIT'], ['throw', W - 170, H - 190, 'THROW'], ['use', W - 80, H - 110, 'USE'], ['sneak', W - 170, H - 110, 'SNEAK'], ['leave', W - 46, 100, 'LEAVE'], ['zoomin', W - 128, 100, '+'], ['zoomout', W - 210, 100, '−']];
+  const TBTN = () => [['melee', W - 80, H - 190, 'HIT'], ['throw', W - 170, H - 190, 'THROW'], ['use', W - 80, H - 110, 'USE'], ['sneak', W - 170, H - 110, 'SNEAK'], ['leave', W - 46, 100, 'LEAVE'], ['zoomin', W - 128, 100, '+'], ['zoomout', W - 210, 100, '−'], ['rotl', W - 210, 158, '⟲'], ['rotr', W - 128, 158, '⟳']];
   m.touchUpdate = () => {
-    for (const a of ['melee', 'use', 'throw', 'leave', 'zoomin', 'zoomout']) TOUCH.act[a] = false; TOUCH.stick = null; let aim = null;
+    for (const a of ['melee', 'use', 'throw', 'leave', 'zoomin', 'zoomout', 'rotl', 'rotr']) TOUCH.act[a] = false; TOUCH.stick = null; let aim = null;
     for (const p of touchPts.values()) {
       let used = false;
       for (const [a, bx, by] of TBTN()) if (Math.hypot(p.x - bx, p.y - by) < 38) { used = true; if (a === 'sneak') { if (!p.tog) { p.tog = true; TOUCH.act.sneak = !TOUCH.act.sneak; } } else TOUCH.act[a] = true; }
@@ -135,13 +135,14 @@ function missionScene(town, mode = 'drive', opts = {}) {
     if (m.done) { m.doneT += dt; return; }
     m.time -= dt; m.fullT -= dt; m.flashT -= dt; m.hurtT -= dt; m.dryT -= dt; m.hordeT -= dt; m.hordeCD -= dt;
     if (TOUCH.on) m.touchUpdate();
-    if (R3D.ok) { R3D.mission.aim(m); if (TOUCH.act.zoomin) m.wheel(1.03); if (TOUCH.act.zoomout) m.wheel(1 / 1.03); }   // 3D: turn the cursor into a point on the stage; touch zoom buttons
+    if (R3D.ok) { R3D.mission.aim(m); if (TOUCH.act.zoomin) m.wheel(1.03); if (TOUCH.act.zoomout) m.wheel(1 / 1.03); if (m.gl) { const rl = keys.BracketLeft || TOUCH.act.rotl, rr = keys.BracketRight || TOUCH.act.rotr; if (rl && !m.rotH) m.gl.yawT -= Math.PI / 2; if (rr && !m.rotH) m.gl.yawT += Math.PI / 2; m.rotH = !!(rl || rr); } }   // 3D: turn the cursor into a point on the stage; touch zoom buttons
     if (kdown('leave')) { keys[SET.kb.leave] = false; TOUCH.act.leave = false; m.finish(true); return; }
     // ---- movement (Shift sneaks: slower, but quiet and harder to spot)
     m.sneak = kdown('sneak');
     const sp = 190 * m.speedMul * (m.sneak ? (crewPerk('stealth') ? .7 : .55) : 1);
     let dx = (kdown('right') ? 1 : 0) - (kdown('left') ? 1 : 0), dy = (kdown('down') ? 1 : 0) - (kdown('up') ? 1 : 0);
     if (TOUCH.stick) { dx = TOUCH.stick.x; dy = TOUCH.stick.y; }
+    if (R3D.ok && m.gl && m.gl.yaw) { const c = Math.cos(m.gl.yaw), s = Math.sin(m.gl.yaw), nx = dx * c + dy * s; dy = -dx * s + dy * c; dx = nx; }   // 3D: the keys follow the rotated view
     const len = Math.max(1, Math.hypot(dx, dy));
     m.moveBlocked(m.p, dx / len * sp * dt, dy / len * sp * dt, 10);
     const Bn = m.bounds; m.p.x = Math.max(Bn.x0, Math.min(Bn.x1, m.p.x)); m.p.y = Math.max(Bn.y0, Math.min(Bn.y1, m.p.y));
@@ -355,7 +356,7 @@ function missionScene(town, mode = 'drive', opts = {}) {
     const c = m.carried, n = Object.values(c).reduce((s, v) => s + v, 0);
     text(`carrying ${n}/${m.cap}: scrap ${c.scrap} food ${c.food} ammo ${c.ammo} shells ${c.shells} wood ${c.wood} water ${c.water} diesel ${c.diesel} meds ${c.meds}${m.gained.length ? '  · vehicles x' + m.gained.length : ''}${m.gearGot.length ? '  · gear x' + m.gearGot.length : ''}`, 12, H - 30, 12, GREEN);
     text(`throw: ${m.item === 'bomb' ? 'pipe bomb' : 'molotov'} x${save.items[m.item]}  (Q switch · G throw)`, 12, H - 46, 12, '#fa5');
-    text(`${m.wR.name}: ${save.res[m.wR.ammo]} ${m.wR.ammo === 'shells' ? 'shells' : 'ammo'}${save.upgrades.suppressor ? ' (suppressed)' : ''}  · melee ${m.wM.name} [Space]  · Shift sneak · hold E at a car · X leave`, 12, H - 62, 12, '#cfe');
+    text(`${m.wR.name}: ${save.res[m.wR.ammo]} ${m.wR.ammo === 'shells' ? 'shells' : 'ammo'}${save.upgrades.suppressor ? ' (suppressed)' : ''}  · melee ${m.wM.name} [Space]  · Shift sneak · hold E at a car · X leave${R3D.ok ? ' · [ ] rotate view' : ''}`, 12, H - 62, 12, '#cfe');
     if (m.done) {
       ctx.fillStyle = 'rgba(3,8,6,.8)'; ctx.fillRect(0, 0, W, H);
       text(m.done === 'win' ? 'EXTRACTED' : 'YOU WERE OVERRUN', W / 2, 260, 36, m.done === 'win' ? GREEN : RED, 'center');

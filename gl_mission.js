@@ -18,9 +18,64 @@ R3D.mission = (() => {
   };
   const rgb = ([r, g, b], k = 1) => `rgb(${Math.round(Math.min(255, r * k))},${Math.round(Math.min(255, g * k))},${Math.round(Math.min(255, b * k))})`;
 
+
+  // ---------------------------------------------------------------- atmosphere + camera helpers
+  const _c1 = new THREE.Color(), _c2 = new THREE.Color(), mixC = (out, a, b, k) => out.set(a).lerp(_c2.set(b), Math.max(0, Math.min(1, k)));
+  const ss = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
+  M.envBuild = (m, g) => {
+    const N = 1100, rp = new Float32Array(N * 6); g.rainPos = rp;
+    for (let i = 0; i < N; i++) { const x = Math.random() * 1400 - 700, y = Math.random() * 430, z = Math.random() * 960 - 480; rp.set([x, y, z, x - 2.4, y + 24, z], i * 6); }
+    const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(rp, 3));
+    g.rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: '#b8c8e0', transparent: true, opacity: .5 })); g.rain.frustumCulled = false; g.rain.visible = false; g.scene.add(g.rain);
+    g.dustN = 110; g.dust = R3D.particles(g.dustN, 2.4); g.dust.material.blending = THREE.AdditiveBlending; g.dust.material.opacity = .45; g.dust.visible = !!m.indoor; g.scene.add(g.dust);
+    g.motes = Array.from({ length: g.dustN }, (_, i) => ({ x: Math.random() * 960 - 480, y: 6 + Math.random() * 120, z: Math.random() * 640 - 320, s: Math.random() * 6.28 }));
+    g.dk = m.night ? 1 : 0; g.skyc = new THREE.Color(); g.surge = 5 + Math.random() * 8; g.surgeT = 0;
+  };
+  // time of day while you are out (the run lasts about an hour on site), the weather at home, storms, dust and power surges
+  M.env = (m, g, dt, t) => {
+    const wx = m.indoor ? 'sunny' : save.weather, wf = { sunny: 1, partly: .85, cloudy: .55, storm: .38 }[wx] || 1, q = R3D.q;
+    const clk = m.arr + (1 - Math.max(0, m.time) / Math.max(1, m.time0)), dk = m.night ? 1 : darkness(clk); g.dk = dk;
+    const flash = R3D.lightning(dt, wx === 'storm' && !m.indoor), dusk = m.indoor ? 0 : Math.sin(Math.min(1, dk) * Math.PI) * .45 * (dk < .98 ? 1 : 0);
+    mixC(g.skyc, m.indoor ? '#14181a' : '#8fb2c8', '#6f7a84', (1 - wf) * 1.3).lerp(_c1.set('#02040a'), dk).lerp(_c1.set('#d98a5a'), dusk);
+    if (flash) g.skyc.lerp(_c1.set('#dfe8ff'), flash * .5);
+    g.scene.background.copy(g.skyc); g.scene.fog.color.copy(g.skyc);
+    const fogNear = (900 - 280 * dk) * (wx === 'storm' ? .45 : wx === 'cloudy' ? .8 : 1), fogFar = (2600 - 1100 * dk) * (wx === 'storm' ? .5 : wx === 'cloudy' ? .85 : 1); g.scene.fog.near = fogNear; g.scene.fog.far = fogFar;
+    mixC(g.hemi.color, '#e6eefb', '#4a5a96', dk); mixC(g.hemi.groundColor, '#6b6a5c', '#05070c', dk);
+    let hi = ((m.indoor ? 1.5 : 1.7) * wf) * (1 - dk) + .5 * dk + flash * 2.6;
+    if (m.indoor && dk < .5) { g.surge -= dt; if (g.surge <= 0) { g.surge = 6 + Math.random() * 10; g.surgeT = .35; } if (g.surgeT > 0) { g.surgeT -= dt; hi *= Math.sin(t * 70) > 0 ? .3 : 1; } else if (Math.sin(t * 23) * Math.sin(t * 7.3) > .9) hi *= .8; }
+    g.hemi.intensity = hi;
+    g.sun.intensity = ((m.indoor ? 1.2 : 2.3) * wf) * (1 - dk) + .45 * dk + flash * 1.5;
+    if (dk < .55) mixC(g.sun.color, '#fff1d6', '#ff9a50', dk / .55); else mixC(g.sun.color, '#ff9a50', '#7a92ff', (dk - .55) / .45);
+    g.sun.position.set(SW / 2 - 320 - 260 * dk, 760 - 420 * dk, SH / 2 + 220);
+    const nightish = dk > .5; if (g.nightish !== nightish) { g.nightish = nightish; g.sun.castShadow = !nightish && q.shadow > 0; g.torch.castShadow = nightish && q.torch; }
+    const tl = ss(.3, .8, dk); g.torch.intensity = 5 * tl; g.glow.intensity = 1.7 * tl;
+    g.floorMat.color.setScalar(wx === 'storm' ? .78 : wx === 'cloudy' ? .9 : 1);
+    const raining = wx === 'storm' && !m.indoor; g.rain.visible = raining;
+    if (raining) { const p = g.rainPos, d = 620 * dt; for (let i = 0; i < p.length; i += 6) { p[i + 1] -= d; p[i + 4] -= d; if (p[i + 1] < 0) { p[i + 1] += 430; p[i + 4] += 430; } } g.rain.geometry.attributes.position.needsUpdate = true; g.rain.position.set(g.tx, 0, g.tz); }
+    if (m.indoor) { g.motes.forEach((o, i) => { o.x += Math.sin(t * .3 + o.s) * 8 * dt; o.y += Math.cos(t * .2 + o.s) * 4 * dt; o.z += Math.cos(t * .25 + o.s * 2) * 8 * dt; if (o.x > 480) o.x -= 960; if (o.x < -480) o.x += 960; if (o.z > 320) o.z -= 640; if (o.z < -320) o.z += 640; });
+      g.dust.userData.set(g.motes, o => [g.tx + o.x, o.y, g.tz + o.z, dk > .5 ? '#6a7090' : '#cfc8b0']); }
+  };
+  // walls between the camera and the player turn see-through, so tall shelves and houses never hide you
+  const _ray = new THREE.Ray(), _box = new THREE.Box3(), _hit = new THREE.Vector3(), _P = new THREE.Vector3(), _dir = new THREE.Vector3(), _pad = new THREE.Vector3(12, 0, 12);
+  const setFade = (grp, f) => {
+    const u = grp.userData;
+    if (!u.fadeMats) { u.fadeMats = []; grp.traverse(o => { if (!o.isMesh) return; const cl = mt => { const c = mt.clone(); u.fadeMats.push(c); return c; }; o.material = Array.isArray(o.material) ? o.material.map(cl) : cl(o.material); }); }
+    for (const mt of u.fadeMats) { mt.transparent = f < .99; mt.opacity = f; mt.depthWrite = f >= .99; }
+  };
+  M.fadeWalls = (m, g, dt) => {
+    const C = g.camera.position, p = m.p; _P.set(p.x, 26, p.y); _dir.subVectors(_P, C); const dist = _dir.length(); _dir.divideScalar(dist); _ray.set(C, _dir);
+    for (const grp of g.walls.values()) {
+      const u = grp.userData, bx = u.box; if (!bx || bx.max.y < 14) continue;
+      _box.copy(bx).expandByVector(_pad); const hit = _ray.intersectBox(_box, _hit), blocks = hit && _hit.distanceTo(C) < dist - 4;
+      const target = blocks ? .2 : 1, f0 = u.fade === undefined ? 1 : u.fade; if (f0 === target) continue;
+      const f = Math.abs(target - f0) < .01 ? target : f0 + (target - f0) * Math.min(1, dt * 9); u.fade = f; setFade(grp, f);
+    }
+  };
+  const dropWall = (g, grp) => { g.root.remove(grp); if (grp.userData.fadeMats) grp.userData.fadeMats.forEach(x => x.dispose()); };
+
   // ---------------------------------------------------------------- build
   M.build = (m, town) => {
-    const g = m.gl = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(40, 1, 20, 3500), tx: m.p.x, tz: m.p.y, dist: 700, pitch: 1.0, walls: new Map(), zs: new Map(), hs: new Map(), crates: new Map(), t0: 0 };
+    const g = m.gl = { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(40, 1, 20, 3500), tx: m.p.x, tz: m.p.y, dist: 700, pitch: 1.0, walls: new Map(), zs: new Map(), hs: new Map(), crates: new Map(), t0: 0, yaw: 0, yawT: 0 };
     const sc = g.scene, night = m.night, indoor = m.indoor;
     sc.background = new THREE.Color(night ? '#02040a' : indoor ? '#14181a' : '#8fb2c8');
     sc.fog = night ? new THREE.Fog('#02040a', 620, 1500) : new THREE.Fog(indoor ? '#14181a' : '#9db9c8', 900, 2600);
@@ -79,7 +134,7 @@ R3D.mission = (() => {
     g.ents.add(g.player); g.player.userData.own.extra.color.set(L.pack || '#4a4438');
     g.gunId = m.wR.id;
     g.blade.material.color.set(m.wM.col || '#9aa');
-    M.fxBuild(g);
+    M.fxBuild(g); M.envBuild(m, g);
     M.decor(m, g);
     // hotwiring: the car you work on gets its driver door opened, headlights on, sparks, and hazard lights + a siren glow when its alarm is going
     g.carFx = new THREE.Group(); g.carFx.visible = false; g.ents.add(g.carFx);
@@ -296,7 +351,7 @@ R3D.mission = (() => {
   };
 
   // a wall as a box: sides take the colour of the art, the top shows the art itself
-  M.wallMesh = (m, g, w, forceH) => { const gp = M.wallMeshRaw(m, g, w, forceH); if (gp.children.length > 2) R3D.merge(gp); return gp; };
+  M.wallMesh = (m, g, w, forceH) => { const gp = M.wallMeshRaw(m, g, w, forceH); if (gp.children.length > 2) R3D.merge(gp); gp.updateMatrixWorld(true); gp.userData.box = new THREE.Box3().setFromObject(gp); return gp; };
   M.wallMeshRaw = (m, g, w, forceH) => {
     const grp = new THREE.Group(), st = w.style;
     const px = w.x, py = w.y, ww = w.w, hh = w.h, cx = px + ww / 2, cz = py + hh / 2;
@@ -501,8 +556,8 @@ R3D.mission = (() => {
   // quality: shadow map size, which small lights stay in the scene (each light costs every pixel, so LOW drops them)
   M.applyQuality = (m, g) => {
     g.qv = R3D.qv; const q = R3D.q, sh = g.sun.shadow;
-    g.sun.castShadow = !m.night && q.shadow > 0; if (q.shadow && sh.mapSize.x !== q.shadow) { sh.mapSize.set(q.shadow, q.shadow); if (sh.map) { sh.map.dispose(); sh.map = null; } }
-    g.torch.castShadow = m.night && q.torch;
+    g.sun.castShadow = !g.nightish && q.shadow > 0; if (q.shadow && sh.mapSize.x !== q.shadow) { sh.mapSize.set(q.shadow, q.shadow); if (sh.map) { sh.map.dispose(); sh.map = null; } }
+    g.torch.castShadow = !!g.nightish && q.torch;
     const minor = [[g.glow, 2], [g.muzzle, 2], [g.fireL[0], 2], [g.blastL, 2], [g.fireL[1], 3], [g.fireL[2], 3], [g.carL, 3], [g.sirenL, 3], ...(g.lampL || []).map(l => [l, 3])];
     for (const [l, need] of minor) { const keep = q.minor >= need; if (keep && !l.parent) g.scene.add(l); else if (!keep && l.parent) g.scene.remove(l); }
   };
@@ -513,15 +568,15 @@ R3D.mission = (() => {
     const g = m.gl; M.cur = g; if (g.qv !== R3D.qv) M.applyQuality(m, g);
     if (g.floorCv !== m.floor) { g.floorCv = m.floor; g.floorTex.image = m.floor; }
     if (m.floorDirty) { g.floorTex.needsUpdate = true; m.floorDirty = false; }
-    const p = m.p, night = m.night;
+    M.env(m, g, dt || .016, t); const p = m.p, night = g.dk > .45;
     // walls: add new, drop taken cars and opened vaults
     const seenW = new Set();
     for (const w of m.walls) {
       seenW.add(w); const sig = (w.burnt ? 1 : 0), rec = g.walls.get(w);
-      if (rec && rec.userData.sig !== sig) { g.root.remove(rec); g.walls.delete(w); }
+      if (rec && rec.userData.sig !== sig) { dropWall(g, rec); g.walls.delete(w); }
       if (!g.walls.has(w)) { const mesh = M.wallMesh(m, g, w); mesh.userData.sig = sig; g.root.add(mesh); g.walls.set(w, mesh); }
     }
-    for (const [w, mesh] of g.walls) if (!seenW.has(w)) { g.root.remove(mesh); g.walls.delete(w); }
+    for (const [w, mesh] of g.walls) if (!seenW.has(w)) { dropWall(g, mesh); g.walls.delete(w); }
     // crates
     sync(g.crates, m.crates, crateMesh, (r, c) => {
       const sp = r.userData.float, bob = sp ? 10 + Math.sin(t * 3 + c.x) * 2 : 0; r.position.set(c.x, bob, c.y);
@@ -613,14 +668,14 @@ R3D.mission = (() => {
     g.glow.position.set(p.x, 34, p.y);
     g.torch.position.set(p.x, 36, p.y); g.torch.target.position.set(p.x + Math.cos(p.a || 0) * 220, 0, p.y + Math.sin(p.a || 0) * 220); g.torch.target.updateMatrixWorld();
     const fl = m.flashT > 0 ? 1 : 0; g.muzzle.position.set(p.x + Math.cos(p.a || 0) * 34, 30, p.y + Math.sin(p.a || 0) * 34); g.muzzle.intensity = fl * 5;
-    if (!night && m.indoor) g.hemi.intensity = 1.45 + (Math.sin(t * 23) * Math.sin(t * 7.3) > .85 ? -.35 : 0);
 
     // camera: chase the player from the south, keep the stage mostly in frame
     const k = 1 - Math.pow(.0005, dt || .016);
     g.tx += (Math.max(260, Math.min(SW - 260, p.x)) - g.tx) * k; g.tz += (Math.max(190, Math.min(SH - 170, p.y)) - g.tz) * k;
-    const sh = m.shake > 0 && SET.shake ? m.shake * 10 * SET.shake : 0, cam = g.camera;
-    cam.position.set(g.tx + g.kickX + (sh ? (Math.random() - .5) * sh : 0), Math.sin(g.pitch) * g.dist + (sh ? (Math.random() - .5) * sh : 0) + (g.kickY || 0) * (SET.shake || 0), g.tz + g.kickZ + Math.cos(g.pitch) * g.dist);
-    cam.lookAt(g.tx, 0, g.tz);
+    g.yaw += (g.yawT - g.yaw) * Math.min(1, (dt || .016) * 8);
+    const sh = m.shake > 0 && SET.shake ? m.shake * 10 * SET.shake : 0, cam = g.camera, hd = Math.cos(g.pitch) * g.dist;
+    cam.position.set(g.tx + Math.sin(g.yaw) * hd + g.kickX + (sh ? (Math.random() - .5) * sh : 0), Math.sin(g.pitch) * g.dist + (sh ? (Math.random() - .5) * sh : 0) + (g.kickY || 0) * (SET.shake || 0), g.tz + Math.cos(g.yaw) * hd + g.kickZ);
+    cam.lookAt(g.tx, 0, g.tz); cam.updateMatrixWorld(); M.fadeWalls(m, g, dt || .016);
     R3D.show(true);
     R3D.render(g.scene, cam);
     M.overlay(m, g, t);

@@ -475,8 +475,9 @@ R3D.base = (() => {
     g.t += dt; const raid = sc.raid, dk = darkness(save.clock), wx = save.weather, wf = { sunny: 1, partly: .85, cloudy: .55, storm: .38 }[wx] || 1, cam = g.camera;
     // sky and light
     const day = 1 - dk, dusk = Math.sin(Math.min(1, dk) * Math.PI) * .35 * (dk < .98 ? 1 : 0);
-    sky.tmp.copy(sky.day).lerp(sky.grey, 1 - wf).lerp(sky.night, dk).lerp(sky.dusk, dusk); g.scene.background.copy(sky.tmp); g.scene.fog.color.copy(sky.tmp); g.scene.fog.near = wx === 'storm' ? 40 : 70; g.scene.fog.far = wx === 'storm' ? 120 : 200;
-    g.hemi.intensity = .42 + 1.1 * day * wf; g.hemi.color.set(dk > .5 ? '#4a5a96' : '#dfeaf8'); g.hemi.groundColor.set(dk > .5 ? '#05070c' : '#6a6a50');
+    sky.tmp.copy(sky.day).lerp(sky.grey, 1 - wf).lerp(sky.night, dk).lerp(sky.dusk, dusk); g.scene.background.copy(sky.tmp); g.scene.fog.color.copy(sky.tmp); g.scene.fog.near = wx === 'storm' ? 40 : wx === 'cloudy' ? 55 : 70; g.scene.fog.far = wx === 'storm' ? 120 : wx === 'cloudy' ? 170 : 200;
+    const flash = R3D.lightning(dt, wx === 'storm');
+    g.hemi.intensity = .42 + 1.1 * day * wf + flash * 2.6; if (flash) g.scene.background.lerp(sky.dusk.clone().set('#dfe8ff'), flash * .5); g.hemi.color.set(dk > .5 ? '#4a5a96' : '#dfeaf8'); g.hemi.groundColor.set(dk > .5 ? '#05070c' : '#6a6a50');
     const th = Math.max(0, Math.min(1, (save.clock - 6) / 14)) * Math.PI;
     g.sun.position.set(GX / 2 - Math.cos(th) * 42, Math.sin(th) * 38 + 5, GY / 2 + 10); g.sun.intensity = 2.5 * Math.max(0, day - .08) * wf; g.sun.color.set(dusk > .1 ? '#ffc890' : '#fff1d6');
     g.moon.intensity = .85 * dk;

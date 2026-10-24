@@ -34,6 +34,15 @@ const R3D = (() => {
     applyLevel(R.level === 'high' ? 'medium' : 'low'); say(`Graphics: lowered to ${R.level.toUpperCase()} to keep the frame rate up (Settings > Graphics)`);
   };
   R.stepDown = () => stepDown();
+  // storm lightning shared by the base and missions: returns a 0..1 flash for this frame and rumbles a moment later
+  R.lightning = (dt, active) => {
+    if (!active) { R._lg = 0; return 0; }
+    R._ln = (R._ln === undefined ? 4 + Math.random() * 6 : R._ln) - dt;
+    if (R._ln <= 0) { R._ln = 7 + Math.random() * 12; R._lg = .38; R._th = .5 + Math.random() * 1.6; }
+    if (R._th > 0 && (R._th -= dt) <= 0) sfx('boom', .35, 0);
+    if (R._lg > 0) { R._lg -= dt; return Math.max(0, Math.abs(Math.sin(R._lg * 38)) * Math.min(1, R._lg / .3)); }
+    return 0;
+  };
   const watch = (sceneObj) => {   // AUTO: judge the frame time of the 3D scene, ignoring the first frames after a scene or level change and long stalls
     const now = performance.now(), dt = now - (R._t || now); R._t = now;
     if (R._scene !== sceneObj) { R._scene = sceneObj; R.warm = 0; R.slow = 0; R.ema = 0; }

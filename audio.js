@@ -5,7 +5,7 @@ const KB_DEFAULT = { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', snea
 const KB_LABEL = { up: 'Move up', down: 'Move down', left: 'Move left', right: 'Move right', sneak: 'Sneak', melee: 'Melee', use: 'Use / hotwire', leave: 'Leave site', throw: 'Throw', swap: 'Switch throwable' };
 const KB_ALT = { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], sneak: ['ShiftRight'] };
 const SET = (() => {
-  const d = { master: .7, sfx: .8, music: .35, uiScale: 1, shake: 1, tips: true, kb: { ...KB_DEFAULT } };
+  const d = { master: .7, sfx: .8, music: .35, uiScale: 1, shake: 1, tips: true, quality: 'auto', kb: { ...KB_DEFAULT } };
   try { const s = JSON.parse(localStorage.getItem('timisz_settings')); if (s) { Object.assign(d, s); d.kb = { ...KB_DEFAULT, ...(s.kb || {}) }; } } catch {}
   return d;
 })();

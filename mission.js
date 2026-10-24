@@ -110,9 +110,9 @@ function missionScene(town, mode = 'drive', opts = {}) {
   };
 
   // ---------------------------------------------------------------- touch controls: a stick on the left, buttons on the right, touch anywhere else to aim and fire
-  const TBTN = () => [['melee', W - 80, H - 190, 'HIT'], ['throw', W - 170, H - 190, 'THROW'], ['use', W - 80, H - 110, 'USE'], ['sneak', W - 170, H - 110, 'SNEAK'], ['leave', W - 46, 100, 'LEAVE']];
+  const TBTN = () => [['melee', W - 80, H - 190, 'HIT'], ['throw', W - 170, H - 190, 'THROW'], ['use', W - 80, H - 110, 'USE'], ['sneak', W - 170, H - 110, 'SNEAK'], ['leave', W - 46, 100, 'LEAVE'], ['zoomin', W - 128, 100, '+'], ['zoomout', W - 210, 100, '−']];
   m.touchUpdate = () => {
-    for (const a of ['melee', 'use', 'throw', 'leave']) TOUCH.act[a] = false; TOUCH.stick = null; let aim = null;
+    for (const a of ['melee', 'use', 'throw', 'leave', 'zoomin', 'zoomout']) TOUCH.act[a] = false; TOUCH.stick = null; let aim = null;
     for (const p of touchPts.values()) {
       let used = false;
       for (const [a, bx, by] of TBTN()) if (Math.hypot(p.x - bx, p.y - by) < 38) { used = true; if (a === 'sneak') { if (!p.tog) { p.tog = true; TOUCH.act.sneak = !TOUCH.act.sneak; } } else TOUCH.act[a] = true; }
@@ -135,7 +135,7 @@ function missionScene(town, mode = 'drive', opts = {}) {
     if (m.done) { m.doneT += dt; return; }
     m.time -= dt; m.fullT -= dt; m.flashT -= dt; m.hurtT -= dt; m.dryT -= dt; m.hordeT -= dt; m.hordeCD -= dt;
     if (TOUCH.on) m.touchUpdate();
-    if (R3D.ok) R3D.mission.aim(m);   // 3D: turn the cursor into a point on the stage
+    if (R3D.ok) { R3D.mission.aim(m); if (TOUCH.act.zoomin) m.wheel(1.03); if (TOUCH.act.zoomout) m.wheel(1 / 1.03); }   // 3D: turn the cursor into a point on the stage; touch zoom buttons
     if (kdown('leave')) { keys[SET.kb.leave] = false; TOUCH.act.leave = false; m.finish(true); return; }
     // ---- movement (Shift sneaks: slower, but quiet and harder to spot)
     m.sneak = kdown('sneak');

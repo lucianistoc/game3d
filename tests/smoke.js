@@ -86,6 +86,9 @@ const path = require('path');
   // ---- touch input and pointer clicks through the real UI
   await run('touch mission', () => { startNewGame(1, {}); TOUCH.on = true; const m = missionScene(TOWNS.find(t => t.kind === 'store'), 'drive'); go(m); touchPts.set(1, { x: 150, y: 450, sx: 100, sy: 450 }); touchPts.set(2, { x: 600, y: 200, sx: 600, sy: 200 }); for (let i = 0; i < 60; i++) m.update(1 / 60); m.draw(0.016, 1); touchPts.clear(); TOUCH.on = false; });
 
+  await run('graphics levels', () => { startNewGame(1, {}); const m = missionScene(TOWNS.find(t => t.kind === 'store'), 'drive'); go(m); for (const q of ['high', 'medium', 'low', '2d', 'auto']) { R3D.setPref(q); m.update(1 / 60); m.draw(.016, 1); baseScene.fit(); } go(baseScene); for (const q of ['low', 'high', 'auto']) { R3D.setPref(q); baseScene.draw(.016, 1); } R3D.label(); });
+  await run('touch base', () => { startNewGame(1, {}); TOUCH.on = true; go(baseScene); baseScene.draw(.016, 1); touchPts.set(1, { x: 300, y: 300, sx: 300, sy: 300 }); touchPts.set(2, { x: 500, y: 300, sx: 500, sy: 300 }); baseScene.update(.05); touchPts.get(1).x = 280; touchPts.get(2).x = 540; baseScene.update(.05); touchPts.clear(); baseScene.up(); TOUCH.on = false; });
+
   console.log(`\n${checks} checks, ${errors.length} problem(s)`);
   await b.close();
   if (errors.length) { console.log(errors.join('\n')); process.exit(1); }

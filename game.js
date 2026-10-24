@@ -18,7 +18,7 @@ function applyLayout() {
 
 // ---------- input ----------
 const keys = {};
-const mouse = { x: 480, y: 320, cx: 0, cy: 0, down: false, btn: 0 };   // x, y: UI (or, in a 3D mission, stage) coordinates; cx, cy: client pixels
+const mouse = { x: 480, y: 320, cx: 0, cy: 0, down: false, btn: 0, touch: false };   // x, y: UI (or, in a 3D mission, stage) coordinates; cx, cy: client pixels
 addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space') e.preventDefault(); });
 addEventListener('keyup', e => { keys[e.code] = false; });
 function mpos(e) {
@@ -31,6 +31,7 @@ let btns = [];
 canvas.addEventListener('pointermove', mpos);
 canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch') TOUCH.on = true;
+  mouse.touch = e.pointerType === 'touch';
   mpos(e); mouse.down = true; mouse.btn = e.button;
   if (e.button === 0) for (const b of btns) {
     if (mouse.x >= b.x && mouse.x <= b.x + b.w && mouse.y >= b.y && mouse.y <= b.y + b.h) { sfx('click'); b.cb(); return; }

@@ -137,6 +137,7 @@ const settingsScene = {
     text('(base and map; the arena and menus keep their size)', 360, 227, 10, '#5fa478');
     text('Screen shake', 60, 266, 13, '#cfe'); button(SET.shake ? 'ON' : 'OFF', 200, 248, 70, 28, () => { SET.shake = SET.shake ? 0 : 1; saveSettings(); });
     text('Tutorial tips', 300, 266, 13, '#cfe'); button(SET.tips ? 'ON' : 'OFF', 420, 248, 70, 28, () => { SET.tips = !SET.tips; saveSettings(); });
+    if (R3D.can) { text('Graphics', 520, 266, 13, '#cfe'); button(R3D.label(), 590, 248, 190, 28, () => R3D.cyclePref()); text('AUTO lowers itself if the game stutters', 590, 292, 10, '#5fa478'); }
     text('KEY BINDINGS (click one, then press a key; Esc cancels)', 60, 312, 12, '#5fa478');
     Object.keys(KB_DEFAULT).forEach((a, i) => {
       const col = i < 5 ? 0 : 1, row = i % 5, x = 60 + col * 440, y = 324 + row * 40, cap = this.capture === a;

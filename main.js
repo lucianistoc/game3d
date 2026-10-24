@@ -10,6 +10,7 @@ function loop(now) {
   if (scene.update) scene.update(dt);
   scene.draw(dt, clock);
   drawNotice(dt);
+  if (TOUCH.on && scene && scene.fixed && scene.update && innerHeight > innerWidth * 1.1) { ctx.fillStyle = 'rgba(3,8,6,.8)'; ctx.fillRect(-UI.ox, -UI.oy, UI.lw, UI.lh); text('Turn your phone sideways to play', W / 2, H / 2, 20, AMBER, 'center'); }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

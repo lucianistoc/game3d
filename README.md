@@ -31,6 +31,8 @@ Day one: open the **Map**, click a nearby settlement, **Drive** or **Walk** ther
 | **X** | leave the site | |
 | **Esc**, **M** | | menu, mute |
 
+**Touch:** in a mission, drag the left stick to move, touch anywhere else to aim and shoot, and use the buttons for HIT, THROW, USE (hold at a car), SNEAK, LEAVE and the zoom +/−. At the base, tap to build, hold and drag to paint fences and walls, and use two fingers to pinch-zoom, twist to rotate and drag to pan. On the night watch tap an attacker to shoot; THROW arms a molotov or pipe bomb for your next tap. Hold the phone sideways.
+
 Every key can be rebound in **Settings**. In the 3D base the camera is free: **middle-drag** (or **Shift + right-drag**) or **[ ]** rotates, middle-drag up and down tilts, **Home** resets, right-drag and WASD pan, the wheel zooms. In a mission the camera follows you from behind and above; the wheel zooms, and the aim point is wherever your cursor meets the floor at chest height. On a touch screen the mission arena shows a stick and buttons; the base gets Pan and zoom buttons.
 
 ## How a day goes
@@ -151,6 +153,10 @@ Needs the radio room.
 | `tests/smoke.js` | Automated smoke test |
 
 All scripts share one global scope; do not reuse a top-level `const` name across files.
+
+### Graphics quality
+
+**Settings > Graphics** cycles AUTO, HIGH, MEDIUM, LOW and 2D. HIGH has 2048 px shadows and every small light; MEDIUM halves the shadow map, drops the night torch's shadows and some small lights and renders at 1x; LOW has no shadows, keeps only the sun/torch and renders at 0.75x; 2D is the original flat drawing. AUTO starts at HIGH (MEDIUM on touch devices), watches the frame time of the 3D view and steps down a level after about 3 s of sustained slowness (and finally to 2D); it never steps back up on its own.
 
 ### How the 3D layer works
 

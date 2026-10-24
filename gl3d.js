@@ -14,16 +14,43 @@ const R3D = (() => {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     R.ok = true;
   } catch (e) { R.ok = false; if (glc) glc.style.display = 'none'; }
-  R.renderer = renderer;
+  R.renderer = renderer; R.can = R.ok;   // can: WebGL works at all; ok: the 3D view is in use right now (the 2D setting turns it off)
+
+  // ---------------------------------------------------------------- graphics quality: HIGH / MEDIUM / LOW, AUTO (steps down when the frame rate suffers), or 2D
+  // pr: render scale cap; shadow: sun shadow-map size (0 = no shadows); torch: night torch casts shadows; minor: how many tiers of small point lights stay (3 = all)
+  R.Q = { high: { pr: 1.5, shadow: 2048, torch: true, minor: 3 }, medium: { pr: 1, shadow: 1024, torch: false, minor: 2 }, low: { pr: .75, shadow: 0, torch: false, minor: 0 } };
+  R.level = 'high'; R.q = R.Q.high; R.qv = 0; R.pref = 'auto'; R.auto2d = false;
+  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;   // phones and tablets start one step lower
+  const applyLevel = lv => { R.level = lv; R.q = R.Q[lv]; R.qv++; R.dirtyMats = true; sizeKey = ''; if (renderer) renderer.shadowMap.enabled = R.q.shadow > 0; R.warm = 0; R.slow = 0; R.ema = 0; };
+  R.setPref = pref => {
+    R.pref = pref; R.auto2d = false; if (!R.can) return;
+    if (pref === '2d') { R.ok = false; R.show(false); if (typeof baseScene !== 'undefined') baseScene.fit(); return; }
+    const was = R.ok; R.ok = true; applyLevel(pref === 'auto' ? (coarse ? 'medium' : 'high') : pref); if (!was && typeof baseScene !== 'undefined') baseScene.fit();
+  };
+  R.label = () => R.pref === '2d' ? '2D (FLAT)' : R.pref === 'auto' ? `AUTO · ${R.ok ? R.level.toUpperCase() : '2D'}` : R.pref.toUpperCase();
+  R.cyclePref = () => { const l = ['auto', 'high', 'medium', 'low', '2d']; SET.quality = l[(l.indexOf(R.pref) + 1) % l.length]; saveSettings(); R.setPref(SET.quality); };
+  const stepDown = () => {
+    if (R.level === 'low') { R.ok = false; R.auto2d = true; R.show(false); if (typeof baseScene !== 'undefined') baseScene.fit(); say('Graphics: switched to 2D to keep the game smooth (Settings > Graphics)'); return; }
+    applyLevel(R.level === 'high' ? 'medium' : 'low'); say(`Graphics: lowered to ${R.level.toUpperCase()} to keep the frame rate up (Settings > Graphics)`);
+  };
+  R.stepDown = () => stepDown();
+  const watch = (sceneObj) => {   // AUTO: judge the frame time of the 3D scene, ignoring the first frames after a scene or level change and long stalls
+    const now = performance.now(), dt = now - (R._t || now); R._t = now;
+    if (R._scene !== sceneObj) { R._scene = sceneObj; R.warm = 0; R.slow = 0; R.ema = 0; }
+    if (R.pref !== 'auto' || dt > 300 || document.hidden) return;
+    R.ema = R.ema ? R.ema * .94 + dt * .06 : dt;
+    if (++R.warm < 90) return;
+    if (R.ema > (R.level === 'low' ? 80 : 40)) { if (++R.slow > 150) stepDown(); } else R.slow = Math.max(0, R.slow - 2);
+  };
 
   // ---------------------------------------------------------------- canvas + camera helpers
   let sizeKey = '';
   R.resize = () => {
-    const dpr = Math.min(devicePixelRatio || 1, 1.5), key = innerWidth + 'x' + innerHeight + '@' + dpr;
+    const dpr = Math.min(devicePixelRatio || 1, R.q.pr), key = innerWidth + 'x' + innerHeight + '@' + dpr;
     if (key !== sizeKey) { sizeKey = key; renderer.setPixelRatio(dpr); renderer.setSize(innerWidth, innerHeight, false); }
   };
   R.show = on => { if (glc) glc.style.visibility = on ? 'visible' : 'hidden'; };
-  R.render = (scene, camera) => { R.resize(); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.render(scene, camera); };
+  R.render = (scene, camera) => { watch(scene); R.resize(); if (R.dirtyMats) { R.dirtyMats = false; scene.traverse(o => { if (o.material) [].concat(o.material).forEach(mt => { mt.needsUpdate = true; }); }); } camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.render(scene, camera); };
   const _v = new THREE.Vector3();
   // world point -> 2D UI coordinates (the space ctx draws in), or null when it is behind the camera
   R.toUI = (x, y, z, camera) => {
@@ -325,5 +352,6 @@ const R3D = (() => {
     return g;
   };
   R.flicker = (f, t, seed = 0) => { const k = 1 + Math.sin(t * 17 + seed) * .12 + Math.sin(t * 29 + seed * 3) * .08; f.userData.parts.forEach((p, i) => p.scale.set(k, 1 + Math.sin(t * 13 + seed + i) * .15, k)); };
+  R.setPref(typeof SET !== 'undefined' && SET.quality ? SET.quality : 'auto');
   return R;
 })();

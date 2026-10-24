@@ -405,10 +405,19 @@ R3D.mission = (() => {
     const p = R3D.ground(g.camera, 18); if (p) { mouse.x = p.x; mouse.y = p.z; }
   };
 
+  // quality: shadow map size, which small lights stay in the scene (each light costs every pixel, so LOW drops them)
+  M.applyQuality = (m, g) => {
+    g.qv = R3D.qv; const q = R3D.q, sh = g.sun.shadow;
+    g.sun.castShadow = !m.night && q.shadow > 0; if (q.shadow && sh.mapSize.x !== q.shadow) { sh.mapSize.set(q.shadow, q.shadow); if (sh.map) { sh.map.dispose(); sh.map = null; } }
+    g.torch.castShadow = m.night && q.torch;
+    const minor = [[g.glow, 2], [g.muzzle, 2], [g.fireL[0], 2], [g.blastL, 2], [g.fireL[1], 3], [g.fireL[2], 3], [g.carL, 3], [g.sirenL, 3], ...(g.lampL || []).map(l => [l, 3])];
+    for (const [l, need] of minor) { const keep = q.minor >= need; if (keep && !l.parent) g.scene.add(l); else if (!keep && l.parent) g.scene.remove(l); }
+  };
+
   // ---------------------------------------------------------------- one frame
   M.frame = (m, town, dt, t) => {
     if (!m.gl) M.build(m, town);
-    const g = m.gl; M.cur = g;
+    const g = m.gl; M.cur = g; if (g.qv !== R3D.qv) M.applyQuality(m, g);
     if (g.floorCv !== m.floor) { g.floorCv = m.floor; g.floorTex.image = m.floor; }
     if (m.floorDirty) { g.floorTex.needsUpdate = true; m.floorDirty = false; }
     const p = m.p, night = m.night;

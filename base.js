@@ -111,16 +111,20 @@ const baseScene = {
       this.pan = { x: mouse.x, y: mouse.y, cx: CAM.x, cy: CAM.y }; return;
     }
     if (this.overUI()) return;
-    if (this.raid) { this.shoot(); return; }
+    if (this.raid) { if (this.throwArmed) { this.throwArmed = false; TOUCH.act.throw = true; this.clearThrow = 3; } else this.shoot(); return; }
     const [gx, gy] = this.cellUnderMouse();
+    if (R3D.ok && mouse.touch) { this.tp = { t: performance.now(), x: mouse.x, y: mouse.y, cell: [gx, gy], started: false }; return; }   // touch: wait a moment, a second finger means camera, not building
     this.paint = { last: [gx, gy], did: this.tool(gx, gy, false) };
   },
-  up() { if (this.paint && this.paint.did) persist(); this.paint = null; this.pan = null; this.rot = null; },
+  up() {
+    if (this.tp && !this.tp.started && !this.gesture && performance.now() - this.tp.t < 400 && this.inBounds(...this.tp.cell)) { if (this.tool(this.tp.cell[0], this.tp.cell[1], false)) persist(); }   // a quick tap places or applies the tool
+    if (this.paint && this.paint.did) persist(); this.paint = null; this.pan = null; this.rot = null; this.tp = null; if (!touchPts.size) this.gesture = null;
+  },
 
   // ---------------------------------------------------------------- night watch
   update(dt) {
     // camera + hotkeys (always)
-    if (R3D.ok) R3D.base.camUpdate(this, dt);
+    if (R3D.ok) { R3D.base.camUpdate(this, dt); R3D.base.touchGesture(this, dt); }
     else {
     const sp = 520 * dt / CAM.z;
     if (kdown('left')) CAM.x -= sp; if (kdown('right')) CAM.x += sp;
@@ -140,9 +144,13 @@ const baseScene = {
         this.paint.last = [gx, gy];
       }
     }
+    if (this.tp && !this.tp.started && !this.gesture && (performance.now() - this.tp.t > 140 || Math.hypot(mouse.x - this.tp.x, mouse.y - this.tp.y) > 10) && touchPts.size === 1) {   // finger held or dragged: start painting
+      this.tp.started = true; this.paint = { last: this.tp.cell, did: this.tool(this.tp.cell[0], this.tp.cell[1], false) };
+    }
     if (!this.raid) { if (save.clock >= DUSK && !save.over && scene === this) go(planScene); return; }
 
     this.raidUpdate(dt);
+    if (this.clearThrow && --this.clearThrow <= 0) TOUCH.act.throw = false;
   },
   endNight(won, lostMsgs = []) {
     const rep = [], r = save.res, wx = WEATHER[save.weather];
@@ -327,6 +335,10 @@ const baseScene = {
     text(`BASE — ${HOME.name}, Timiș`, 12, 58, 15, AMBER);
     this.ui = null;
     if (raid) {
+      if (TOUCH.on && !raid.result) {   // touch has no Q / G keys: arm a throw, then tap the target
+        button(this.throwArmed ? 'TAP THE TARGET' : `THROW ${this.item === 'bomb' ? 'PIPE BOMB' : 'MOLOTOV'} x${save.items[this.item]}`, W - 200, H - 150, 190, 46, () => { this.throwArmed = !this.throwArmed; });
+        button('SWITCH ITEM', W - 200, H - 98, 190, 40, () => { this.item = this.item === 'molotov' ? 'bomb' : 'molotov'; });
+      }
       text(`NIGHT WATCH ${fmtClock(save.clock)} — ${raid.zombies.length + raid.toSpawn + raid.raiders}/${raid.total} hostile (click to shoot)`, W / 2 - 40, 58, 14, RED, 'center');
       if (raid.result) {
         const rp = raid.report || [], oy = Math.max(40, Math.min(H / 2 - 150, H - 160 - (raid.report || []).length * (((raid.report || []).length > 12) ? 16 : 20) - 10)), lh = rp.length > 12 ? 16 : 20, oh = 150 + rp.length * lh;
@@ -402,6 +414,6 @@ const baseScene = {
     }
     { const ft = forecastText(); if (ft && !raid) text('Tonight: ' + ft, W / 2 + 40, 76, 11, '#fa5', 'center'); }
     drawTip('base');
-    text(R3D.ok ? 'right-drag / WASD: pan · middle-drag or [ ]: rotate · wheel: zoom · drag to paint fences & walls · 1-4: pick item · F: reset view' : 'right-drag / WASD: pan · wheel: zoom · drag to paint fences & walls · 1-4: pick item · F: fit view', W / 2, H - 14, 11, '#5fa478', 'center');
+    text(R3D.ok && TOUCH.on ? 'tap: build · hold and drag: paint · two fingers: pinch zoom, twist rotate, drag pan' : R3D.ok ? 'right-drag / WASD: pan · middle-drag or [ ]: rotate · wheel: zoom · drag to paint fences & walls · 1-4: pick item · F: reset view' : 'right-drag / WASD: pan · wheel: zoom · drag to paint fences & walls · 1-4: pick item · F: fit view', W / 2, H - 14, 11, '#5fa478', 'center');
   },
 };

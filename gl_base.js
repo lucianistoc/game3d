@@ -445,13 +445,33 @@ R3D.base = (() => {
     }
     g.tx = Math.max(-14, Math.min(GX + 14, g.tx)); g.tz = Math.max(-14, Math.min(GY + 14, g.tz));
   };
+  // touch: two fingers pinch to zoom, twist to rotate and drag to pan (one finger builds / shoots, handled in base.js)
+  B.touchGesture = sc => {
+    if (!g) return; const pts = [...touchPts.values()];
+    if (pts.length < 2) { sc.gest = null; return; }
+    const [a, b] = pts, d = Math.hypot(a.x - b.x, a.y - b.y) || 1, ang = Math.atan2(b.y - a.y, b.x - a.x), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, G = sc.gest;
+    sc.gesture = true; sc.tp = null; sc.paint = null; sc.pan = null; sc.rot = null;
+    if (G) {
+      g.dist = Math.max(8, Math.min(90, g.dist * G.d / d));
+      let da = ang - G.ang; da = Math.atan2(Math.sin(da), Math.cos(da)); g.yaw += da;
+      const k = 2 * g.dist * Math.tan(19 * Math.PI / 180) / innerHeight * UI.scale, fx = -Math.sin(g.yaw), fz = -Math.cos(g.yaw), rx = Math.cos(g.yaw), rz = -Math.sin(g.yaw), dx = mx - G.mx, dy = my - G.my, sp = Math.sin(g.pitch);
+      g.tx = Math.max(-14, Math.min(GX + 14, g.tx - rx * dx * k + fx * dy * k / sp)); g.tz = Math.max(-14, Math.min(GY + 14, g.tz - rz * dx * k + fz * dy * k / sp));
+    }
+    sc.gest = { d, ang, mx, my };
+  };
   B.startPan = sc => { if (!g) init(); g.camera.updateMatrixWorld(); const p = R3D.ground(g.camera, 0); sc.pan = { g: p }; };
   B.startRot = sc => { if (!g) init(); sc.rot = { x: mouse.x, y: mouse.y, yaw: g.yaw, pitch: g.pitch }; };
 
   // ---------------------------------------------------------------- one frame
   const sky = { day: new THREE.Color('#8db7dc'), night: new THREE.Color('#04060d'), dusk: new THREE.Color('#e08a5a'), grey: new THREE.Color('#7f8a94'), tmp: new THREE.Color() };
+  B.applyQuality = () => {
+    g.qv = R3D.qv; const q = R3D.q, sh = g.sun.shadow;
+    g.sun.castShadow = q.shadow > 0; if (q.shadow && sh.mapSize.x !== q.shadow) { sh.mapSize.set(q.shadow, q.shadow); if (sh.map) { sh.map.dispose(); sh.map = null; } }
+    const minor = [[g.porch, 2], [g.flood[0], 2], [g.flood[1], 2], [g.flood[2], 3], [g.flood[3], 3], [g.fireL[0], 2], [g.fireL[1], 3], [g.blastL, 2]];
+    for (const [l, need] of minor) { const keep = q.minor >= need; if (keep && !l.parent) g.scene.add(l); else if (!keep && l.parent) g.scene.remove(l); }
+  };
   B.frame = (sc, dt, time, hover) => {
-    if (!g) init();
+    if (!g) init(); if (g.qv !== R3D.qv) B.applyQuality();
     g.t += dt; const raid = sc.raid, dk = darkness(save.clock), wx = save.weather, wf = { sunny: 1, partly: .85, cloudy: .55, storm: .38 }[wx] || 1, cam = g.camera;
     // sky and light
     const day = 1 - dk, dusk = Math.sin(Math.min(1, dk) * Math.PI) * .35 * (dk < .98 ? 1 : 0);

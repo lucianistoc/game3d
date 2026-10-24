@@ -79,6 +79,7 @@ R3D.mission = (() => {
     g.ents.add(g.player); g.player.userData.own.extra.color.set(L.pack || '#4a4438');
     g.gunId = m.wR.id;
     g.blade.material.color.set(m.wM.col || '#9aa');
+    M.decor(m, g);
     g.ready = true; g.lastTown = town;
   };
 
@@ -174,6 +175,38 @@ R3D.mission = (() => {
       const c = PALETTE[Math.floor(seed * 7) % 7], col = seed > .5 ? '#6a7a4a' : '#8a8a6a'; R3D.mesh(R3D.prism(w, 38, d), R3D.mat(col), 0, 0, 0, G.grp); const B = G.B;
       B(w * .22, 24, 1, '#1a1a14', 0, 12, d / 2 + .4); for (const sx of [-1, 1]) { G.cyl(.8, 40, '#4a3a22', sx * w / 2, 20, d / 2 + 3); G.cyl(.4, 24, '#9a8a6a', sx * (w / 2 + 6), 12, d / 2 + 8).rotation.z = sx * .4; }
     },
+    house(w, d, avg, seed, G, wo) {
+      const R = G.grp, long = w >= d, L = long ? w : d, S = long ? d : w, H = 36, rh = S * .3, dmg = !!(wo && wo.dmg), B = G.B;
+      const inner = new THREE.Group(); R.add(inner); const Bi = (bw, bh, bd, c, x, y, z) => { const mm = R3D.mesh(R3D.box(Math.max(.1, bw), Math.max(.1, bh), Math.max(.1, bd)), R3D.mat(c), x, y + bh / 2, z, inner); return mm; };
+      if (!long) inner.rotation.y = Math.PI / 2;
+      const plaster = ['#cfc7b4', '#b9b09a', '#d8d0c0', '#a8a090', '#c8b8a0'][Math.floor(seed * 5) % 5], roofC = wo && wo.tex === 'tile2' ? '#b8643a' : '#8a3a2a', dark = '#07080a';
+      Bi(L + 3, 3, S + 3, '#7a766e', 0, 0, 0);                         // plinth
+      Bi(L, H, S, plaster, 0, 3, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) Bi(3, H, 3, shadeHex(plaster, .85), sx * (L / 2 - 1.5), 3, sz * (S / 2 - 1.5));
+      if (dmg) { Bi(L * .5, 1, S * .6, dark, -L * .1, H + 2, 0); }
+      // roof: two slopes cut into sections so a damaged roof can lose some
+      const span = S / 2 + 4, ang = Math.atan2(rh, span), len = Math.hypot(span, rh), nseg = 5, segL = (L + 6) / nseg;
+      for (const sd of [-1, 1]) for (let i = 0; i < nseg; i++) {
+        if (dmg && sd === 1 && (i === 1 || i === 2)) continue; if (dmg && sd === -1 && i === 3 && seed > .5) continue;
+        const sl = R3D.mesh(R3D.box(segL - .4, 1.6, len), R3D.mat(shadeHex(roofC, .9 + ((i + (sd > 0 ? 2 : 0)) % 3) * .05)), -L / 2 - 3 + segL * (i + .5), H + 3 + rh / 2 + .6, sd * span / 2, inner); sl.rotation.x = sd * ang;
+      }
+      if (!dmg || seed < .5) Bi(L + 6, 2, 2.4, shadeHex(roofC, .6), 0, H + 3 + rh - .4, 0);                // ridge cap
+      for (const sx of [-1, 1]) { const gb = R3D.mesh(R3D.prism(.8, rh, S + 1), R3D.mat(plaster), sx * (L / 2 - .4), H + 3, 0, inner); }   // gable ends
+      if (dmg) for (let i = 0; i < 3; i++) { const br = Bi(S * .8, 1.8, 1.8, '#4a3220', -L * .1 + (i - 1) * 8, H + 6 + i * 2, (i - 1) * 3); br.rotation.set(i * .3, i * .7, .4 - i * .3); }
+      Bi(6, rh * .8 + 6, 6, '#8a4a3a', L * .28, H + 3 + rh * .3, -S * .12); Bi(7.5, 1.6, 7.5, '#5a5a58', L * .28, H + 3 + rh * .3 + rh * .8 + 6, -S * .12);   // chimney + cap
+      // front (+z): door, steps, windows; the long back and the ends get windows too
+      Bi(9, 20, 1.6, '#4a3220', -L * .12, 3, S / 2 + .3); Bi(12, 24, .8, '#e8e4d8', -L * .12, 3, S / 2 + .1); Bi(14, 2, 5, '#8a8c8a', -L * .12, 0, S / 2 + 3); R3D.mesh(R3D.sphere(.9, 6), R3D.mat('#d8b030'), -L * .12 + 3, 13, S / 2 + 1.4, inner);
+      const win = (x, y, z, rot, i) => {
+        const broken = dmg && (i % 2 === 0), g2 = new THREE.Group(); g2.position.set(x, y, z); g2.rotation.y = rot; inner.add(g2);
+        const f = (bw, bh, bd, c, px, py, pz) => { const mm = R3D.mesh(R3D.box(bw, bh, bd), R3D.mat(c), px, py, pz, g2, false); return mm; };
+        f(11, 13, .8, '#e8e4d8', 0, 0, 0); f(8.6, 10.6, 1, broken ? dark : '#2a3a48', 0, 0, .1);
+        if (!broken) { f(.8, 10.6, 1.1, '#e8e4d8', 0, 0, .15); f(8.6, .8, 1.1, '#e8e4d8', 0, 0, .15); f(13, 1.4, 2, '#b8b4a8', 0, -7, .6); }
+        else { for (const a of [.6, -.6]) { const bd = f(12, 1.6, .8, '#7a5a38', 0, 0, 1); bd.rotation.z = a; } }
+      };
+      let wi = 0; for (const sx of [-.34, .22]) win(sx * L * 1.05 + (sx < 0 ? 0 : L * .12), 20, S / 2 + .6, 0, wi++);
+      for (const sx of [-.3, .3]) win(sx * L, 20, -S / 2 - .6, Math.PI, wi++);
+      for (const sz of [-1, 1]) win(sz * (L / 2 + .6), 20, 0, sz * Math.PI / 2, wi++);
+      if (dmg) { Bi(14, 6, 10, '#6a6660', -L * .3, 0, S / 2 + 9).rotation.y = .4; Bi(8, 4, 8, '#6a6660', L * .35, 0, S / 2 + 7).rotation.y = -.5; }   // rubble in the yard
+    },
     sandbag(w, d, avg, seed, G) {
       const n = 3, B = G.B; for (let r = 0; r < n; r++) { const step = 7; for (let i = 0; i < Math.max(2, Math.round((w > d ? w : d) / step)); i++) { const along = w > d, off = r % 2 ? step / 2 : 0, len = along ? w : d, t = -len / 2 + (i + .5) * len / Math.max(2, Math.round(len / step)) + off * 0; const bag = along ? B(step - .8, 4.2, d * .9, r % 2 ? '#a99262' : '#b9a272', t, r * 4.4, 0) : B(w * .9, 4.2, step - .8, r % 2 ? '#a99262' : '#b9a272', 0, r * 4.4, t); } }
     },
@@ -207,11 +240,54 @@ R3D.mission = (() => {
     },
   };
   PROPS.cage = PROPS.cell;
-  const makeProp = (st, w, hh, avg, seed) => {
+  const makeProp = (st, w, hh, avg, seed, wo) => {
     const grp = new THREE.Group(), G = { grp };
     G.B = (bw, bh, bd, color, x, y, z) => { const mm = R3D.mesh(R3D.box(Math.max(.1, bw), Math.max(.1, bh), Math.max(.1, bd)), color.startsWith('rgba') ? R3D.mat('#dfe8f0', { op: .5 }) : R3D.mat(color), x, y + bh / 2, z, grp); return mm; };
     G.cyl = (r, h, color, x, cy, z) => R3D.mesh(R3D.cyl(r, r, h, 8), R3D.mat(color), x, cy, z, grp);
-    PROPS[st](w, hh, avg, seed || 0, G); return grp;
+    PROPS[st](w, hh, avg, seed || 0, G, wo); return grp;
+  };
+
+
+  // ---- scenery that is only for show (lamps, poles, signs, hydrants, hay...). Placed on free ground; lamps light up at night.
+  M.decor = (m, g) => {
+    const B = m.bounds, rects = m.walls.filter(w => w.style !== 'inv' || w.vault || w.cage), grp = new THREE.Group(); g.root.add(grp); g.lamps = [];
+    const free = (x, z, r = 12) => x > B.x0 + r && x < B.x1 - r && z > B.y0 + r && z < B.y1 - r && Math.hypot(x - m.p.x, z - m.p.y) > 50 && !rects.some(w => x > w.x - r && x < w.x + w.w + r && z > w.y - r && z < w.y + w.h + r);
+    const R = (a, b) => a + Math.random() * (b - a), P = (geo, mat, x, y, z, par = grp) => R3D.mesh(geo, mat, x, y, z, par);
+    const lampMat = g.lampMat = new THREE.MeshLambertMaterial({ color: '#ddd', emissive: '#ffe2a0', emissiveIntensity: 0 });
+    const lamp = (x, z, face, broken) => {
+      const o = new THREE.Group(); o.position.set(x, 0, z); o.rotation.y = face; grp.add(o);
+      P(R3D.cyl(3.5, 4.5, 3, 8), R3D.mat('#4a4e52'), 0, 1.5, 0, o); P(R3D.cyl(1.4, 2, 66, 8), R3D.mat('#5a5e62'), 0, 36, 0, o);
+      const arm = P(R3D.box(16, 1.6, 1.6), R3D.mat('#5a5e62'), 7, 69, 0, o); P(R3D.box(9, 2.6, 5), R3D.mat('#3a3e42'), 14, 68, 0, o); const hd = P(R3D.box(7.4, 1, 4), broken ? R3D.mat('#222') : lampMat, 14, 66.6, 0, o, false);
+      if (broken) { o.rotation.z = R(.12, .3); } else g.lamps.push({ x: x + Math.cos(face) * 14, z: z - Math.sin(face) * 14, broken });
+    };
+    const hydrant = (x, z) => { const o = new THREE.Group(); o.position.set(x, 0, z); grp.add(o); P(R3D.cyl(2.8, 3.2, 12, 8), R3D.mat('#c8302a'), 0, 6, 0, o); P(R3D.sphere(3, 8), R3D.mat('#c8302a'), 0, 13, 0, o); P(R3D.box(9, 2.2, 2.2), R3D.mat('#a02020'), 0, 8, 0, o); };
+    const bin = (x, z, tip) => { const o = new THREE.Group(); o.position.set(x, 0, z); grp.add(o); P(R3D.cyl(5, 4.2, 12, 10), R3D.mat('#3a5a3a'), 0, 6, 0, o); P(R3D.cyl(5.4, 5.4, 1.5, 10), R3D.mat('#2a3a2a'), 0, 12.5, 0, o); if (tip) { o.rotation.z = 1.4; o.position.y = 5; } };
+    const sign = (x, z, face) => { const o = new THREE.Group(); o.position.set(x, 0, z); o.rotation.y = face; grp.add(o); P(R3D.cyl(1, 1, 44, 6), R3D.mat('#6a6e72'), 0, 22, 0, o); P(R3D.box(.8, 8, 14), R3D.mat('#1c5aa8'), 1, 40, 0, o); P(R3D.box(.8, 8, 14), R3D.mat('#e8e8e0'), 1, 31, 0, o); };
+    const pole = (x, z) => { const o = new THREE.Group(); o.position.set(x, 0, z); grp.add(o); P(R3D.cyl(2, 2.6, 96, 8), R3D.mat('#6a5a42'), 0, 48, 0, o); P(R3D.box(2, 2, 36), R3D.mat('#5a4a32'), 0, 90, 0, o); P(R3D.box(2, 2, 28), R3D.mat('#5a4a32'), 0, 78, 0, o); for (const z2 of [-16, 0, 16]) P(R3D.cyl(1.2, 1.2, 3, 6), R3D.mat('#dde'), 0, 92.5, z2, o); return o; };
+    const wire = (a, b) => { for (const dz of [-16, 0, 16]) { const n = 5; for (let i = 0; i < n; i++) { const t0 = i / n, t1 = (i + 1) / n, sag = t => -Math.sin(t * Math.PI) * 9, x0 = a.x + (b.x - a.x) * t0, x1 = a.x + (b.x - a.x) * t1, z0 = a.z + (b.z - a.z) * t0 + dz, z1 = a.z + (b.z - a.z) * t1 + dz, y0 = 92 + sag(t0), y1 = 92 + sag(t1), len = Math.hypot(x1 - x0, y1 - y0, z1 - z0), s = P(R3D.box(.5, .5, len), R3D.mat('#15161a'), (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); s.lookAt(x1, y1, z1); s.castShadow = false; } } };
+    const hay = (x, z) => { const h = P(R3D.cyl(10, 10, 16, 14), R3D.mat('#c8a850'), x, 10, z); h.rotation.z = Math.PI / 2; h.rotation.y = R(0, 3); for (let i = 0; i < 3; i++) { const r = P(R3D.cyl(10.1, 10.1, .6, 14), R3D.mat('#a88830'), x, 10, z); r.rotation.z = Math.PI / 2; r.rotation.y = h.rotation.y; r.position.addScaledVector(new THREE.Vector3(Math.cos(h.rotation.y), 0, -Math.sin(h.rotation.y)), -5 + i * 5); } };
+    const barrel = (x, z, c) => { P(R3D.cyl(5, 5, 13, 10), R3D.mat(c), x, 6.5, z); P(R3D.cyl(5.2, 5.2, 1, 10), R3D.mat('#2a2d30'), x, 4, z); P(R3D.cyl(5.2, 5.2, 1, 10), R3D.mat('#2a2d30'), x, 9, z); };
+    const tires = (x, z) => { for (let i = 0; i < 3; i++) { const t = P(new THREE.TorusGeometry(5, 2.2, 6, 12), R3D.mat('#151515'), x, 2.2 + i * 4.4, z); t.rotation.x = Math.PI / 2; } };
+    const tries = (n, fn) => { for (let i = 0, ok = 0; i < 60 && ok < n; i++) { const x = R(B.x0 + 20, B.x1 - 20), z = R(B.y0 + 20, B.y1 - 20); if (free(x, z)) { fn(x, z); ok++; } } };
+    const th = m.theme;
+    if (th === 'ruins_town') {
+      for (const y of [296, 402]) for (let x = 60 + R(0, 40); x < SW - 40; x += R(120, 170)) if (x < 410 || x > 550) if (free(x, y, 6)) lamp(x, y, y < 350 ? Math.PI / 2 : -Math.PI / 2, Math.random() < .3);
+      for (let x = 440; x < 540; x += 100) for (const y of [90, 200, 480, 590]) if (free(x - 20, y, 6) && Math.random() < .55) lamp(x - 20, y, 0, Math.random() < .3);
+      tries(3, hydrant); tries(5, (x, z) => bin(x, z, Math.random() < .35)); tries(2, (x, z) => sign(x, z, R(0, 6)));
+    } else if (th === 'ruins_village') {
+      const y0 = R(520, 590), pts = []; for (let x = 60; x < SW - 20; x += R(200, 260)) { const q = pole(x, y0 + R(-10, 10)); pts.push({ x, z: q.position.z }); }
+      for (let i = 1; i < pts.length; i++) wire(pts[i - 1], pts[i]);
+      tries(3, hay); tries(4, (x, z) => barrel(x, z, ['#2a5a8a', '#8a3a2a', '#4a6a3a'][Math.floor(R(0, 3))])); tries(2, tires);
+    } else if (th.startsWith('dealer')) {
+      for (const [x, z] of [[B.x0 + 40, B.y0 + 30], [SW / 2, B.y0 + 30], [B.x1 - 40, B.y0 + 30], [B.x0 + 40, B.y1 - 40], [B.x1 - 40, B.y1 - 40]]) if (free(x, z, 6)) lamp(x, z, Math.PI / 2, Math.random() < .15);
+      tries(1, (x, z) => sign(x, z, 0));
+    } else if (th === 'fuel') {
+      for (const [x, z] of [[B.x0 + 50, B.y0 + 40], [B.x1 - 50, B.y0 + 40], [B.x0 + 50, B.y1 - 40], [B.x1 - 50, B.y1 - 40]]) if (free(x, z, 6)) lamp(x, z, Math.PI / 2, false);
+      tries(2, (x, z) => barrel(x, z, '#8a3a2a')); tries(2, (x, z) => bin(x, z, false)); tries(1, (x, z) => sign(x, z, 1));
+    } else if (th === 'camp') {
+      tries(3, (x, z) => barrel(x, z, '#6a3a2a')); tries(2, tires);
+    }
+    g.lampL = [0, 1].map(() => { const l = new THREE.PointLight('#ffd890', 0, 280, 0); g.scene.add(l); return l; });
   };
 
   // a wall as a box: sides take the colour of the art, the top shows the art itself
@@ -231,11 +307,6 @@ R3D.mission = (() => {
       for (let i = 0; i < 6; i++) { const a = i * 2.4 + px, rr = i ? r * .55 : 0; const c = R3D.mesh(R3D.blob((i ? .55 : .85) * r, i + 3), R3D.mat(rgb(avg, .7 + (i % 3) * .1)), cx + Math.cos(a) * rr, 44 + (i % 3) * 5 + (i ? 0 : 6), cz + Math.sin(a) * rr); c.rotation.y = i; grp.add(c); }
       return grp;
     }
-    if (st === 'house') {
-      const bh = 40, geo = new THREE.BoxGeometry(ww, bh, hh); tex(geo, px, py, px + ww, py + hh);
-      const side = R3D.mat(rgb(avg, .85)); const body = new THREE.Mesh(geo, [side, side, R3D.mat('#000'), side, side, side]); body.position.set(cx, bh / 2, cz); body.castShadow = body.receiveShadow = true; grp.add(body);
-      const roof = R3D.mesh(R3D.prism(ww + 6, 20, hh + 6), R3D.mat('#8a4a3a'), cx, bh, cz); if (hh > ww) roof.rotation.y = Math.PI / 2, roof.geometry = R3D.prism(hh + 6, 20, ww + 6); grp.add(roof); return grp;
-    }
     if (st === 'ring') {
       const geo = new THREE.BoxGeometry(ww, forceH, hh); tex(geo, px, py, px + ww, py + hh);
       const side = R3D.mat(rgb(avg, .7)); const mesh = new THREE.Mesh(geo, [side, side, new THREE.MeshLambertMaterial({ color: rgb(avg, .75) }), side, side, side]); mesh.position.set(cx, forceH / 2, cz); mesh.castShadow = mesh.receiveShadow = true; grp.add(mesh); return grp;
@@ -246,7 +317,7 @@ R3D.mission = (() => {
       else if (w.cage) { for (let i = -2; i <= 2; i++) { grp.add(R3D.mesh(R3D.cyl(1.2, 1.2, 34, 6), R3D.mat('#8a8f96'), cx + i * 9, 17, cz - 22)); grp.add(R3D.mesh(R3D.cyl(1.2, 1.2, 34, 6), R3D.mat('#8a8f96'), cx + i * 9, 17, cz + 22)); grp.add(R3D.mesh(R3D.cyl(1.2, 1.2, 34, 6), R3D.mat('#8a8f96'), cx - 22, 17, cz + i * 9)); grp.add(R3D.mesh(R3D.cyl(1.2, 1.2, 34, 6), R3D.mat('#8a8f96'), cx + 22, 17, cz + i * 9)); } grp.add(R3D.mesh(R3D.box(46, 2, 46), R3D.mat('#8a8f96'), cx, 35, cz)); }
       return grp;
     }
-    if (PROPS[st]) { const pg = makeProp(st, ww, hh, avg, w.seed); pg.position.set(cx, 0, cz); return pg; }
+    if (PROPS[st]) { const pg = makeProp(st, ww, hh, avg, w.seed, w); pg.position.set(cx, 0, cz); return pg; }
     const h = WALL_H[st] || 20, geo = new THREE.BoxGeometry(ww, h, hh); tex(geo, px, py, px + ww, py + hh);
     const k = st === 'container' || st === 'counter' || st === 'locker' ? 1 : .92, side = SIDE_STYLES.has(st) ? sideMats(st, ww, hh, h, geo, st === 'container' && w.col ? w.col : '#ffffff') : new THREE.MeshLambertMaterial({ color: rgb(w.col ? hexToRgb(w.col) : avg, k), flatShading: true });
     const mesh = new THREE.Mesh(geo, [side, side, g.floorMat, side, side, side]); mesh.position.set(cx, h / 2, cz); mesh.castShadow = h > 3; mesh.receiveShadow = true; grp.add(mesh);
@@ -400,6 +471,8 @@ R3D.mission = (() => {
     // cracks that have not collapsed yet
     g.cracks.begin(); for (const c of m.cracks || []) if (c.st === 'idle') g.cracks.next().position.set(c.x, 0, c.y); g.cracks.end();
 
+    // street lamps: lit at night, the two nearest also light the ground
+    if (g.lampMat) { g.lampMat.emissiveIntensity = night ? 1.6 : 0; const near = g.lamps.slice().sort((a, b) => Math.hypot(a.x - p.x, a.z - p.y) - Math.hypot(b.x - p.x, b.z - p.y)); g.lampL.forEach((L, i) => { const q = near[i]; if (q && night) { L.position.set(q.x, 60, q.z); L.intensity = 3.2; } else L.intensity = 0; }); }
     // lighting follows the player
     g.glow.position.set(p.x, 34, p.y);
     g.torch.position.set(p.x, 36, p.y); g.torch.target.position.set(p.x + Math.cos(p.a || 0) * 220, 0, p.y + Math.sin(p.a || 0) * 220); g.torch.target.updateMatrixWorld();

@@ -75,7 +75,7 @@ R3D.mission = (() => {
     g.cracks = R3D.pool(() => { const o = new THREE.Group(); const mat = new THREE.LineBasicMaterial({ color: '#1a120a' }); const pts = []; for (let i = 0; i < 6; i++) { const a = i * 1.05 + .3; pts.push(0, 0, 0, Math.cos(a) * 24, 0, Math.sin(a) * 24); } const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); const ls = new THREE.LineSegments(geo, mat); ls.position.y = 1.3; o.add(ls); g.ents.add(o); return o; });
     // player
     const L = gearLook();
-    g.player = R3D.humanoid({ skin: '#d4a77f', shirt: L.coat, pants: '#2b3340', hat: '#243444', extra: L.pack || '#4a4438', boots: !!L.boot, scale: 40, pack: .6 + .8 * 0, gun: GUN_LEN[m.wR.id] || .6, pose: 'aim' });
+    g.player = R3D.humanoid({ skin: '#d4a77f', shirt: L.coat, pants: '#2b3340', hat: '#243444', extra: L.pack || '#4a4438', boots: !!L.boot, scale: 40, pack: .6 + .8 * 0, gun: m.wR.id, pose: 'aim' });
     g.ents.add(g.player); g.player.userData.own.extra.color.set(L.pack || '#4a4438');
     g.gunId = m.wR.id;
     g.blade.material.color.set(m.wM.col || '#9aa');
@@ -95,8 +95,9 @@ R3D.mission = (() => {
     }
     if (st === 'tree') {
       const r = Math.min(ww, hh) / 2;
-      grp.add(R3D.mesh(R3D.cyl(r * .22, r * .3, 34, 7), R3D.mat('#5a3d22'), cx, 17, cz));
-      grp.add(R3D.mesh(R3D.sphere(r * 1.05, 9), R3D.mat(rgb(avg, .75)), cx, 46, cz)); return grp;
+      grp.add(R3D.mesh(R3D.cyl(r * .2, r * .32, 36, 9), R3D.mat('#5a3d22'), cx, 18, cz));
+      for (let i = 0; i < 6; i++) { const a = i * 2.4 + px, rr = i ? r * .55 : 0; const c = R3D.mesh(R3D.blob((i ? .55 : .85) * r, i + 3), R3D.mat(rgb(avg, .7 + (i % 3) * .1)), cx + Math.cos(a) * rr, 44 + (i % 3) * 5 + (i ? 0 : 6), cz + Math.sin(a) * rr); c.rotation.y = i; grp.add(c); }
+      return grp;
     }
     if (st === 'tent') {
       const t = R3D.mesh(R3D.prism(ww, 38, hh), R3D.mat(rgb(avg, .95)), cx, 0, cz); grp.add(t); return grp;
@@ -176,11 +177,11 @@ R3D.mission = (() => {
   const zombieMesh = z => {
     const [s, bulk] = ZLOOK[z.kind] || ZLOOK.walker, skin = ZSKIN[z.kind] || ZSKIN.walker;
     const h = R3D.humanoid({ skin, shirt: z.kind === 'spitter' ? '#566a2a' : CLOTH[z.vi % CLOTH.length], pants: '#303236', hat: z.kind === 'armored' ? '#40464c' : skin, extra: '#3a4046', scale: s, bulk, pose: 'zombie', belly: z.kind === 'spitter', plates: z.kind === 'armored', lean: z.kind === 'runner' ? .22 : 0 });
-    for (const sg of [-1, 1]) { const e = new THREE.Mesh(R3D.box(.02, .025, .03), R3D.basic('#ff2a1e')); e.position.set(.085, .02, sg * .04); h.userData.head.add(e); }
+    for (const sg of [-1, 1]) { const e = new THREE.Mesh(R3D.box(.02, .025, .03), R3D.basic('#ff2a1e')); e.position.set(.07, .016, sg * .04); h.userData.head.add(e); }
     if (z.kind === 'mutant') { for (const sg of [-1, 1]) { const sp = new THREE.Mesh(R3D.cone(.03, .14, 5), R3D.mat('#d8cfae')); sp.position.set(0, .12, sg * .07); h.userData.head.add(sp); } }
     return h;
   };
-  const humanMesh = h => R3D.humanoid({ skin: '#c89a74', shirt: h.leader ? '#6a1a1a' : '#8a4a28', pants: '#2a2420', hat: '#2a2420', extra: '#5a2a1a', scale: h.leader ? 46 : 40, bulk: h.leader ? 1.25 : 1, gun: .6, pose: 'aim', twoHand: true });
+  const humanMesh = h => R3D.humanoid({ skin: '#c89a74', shirt: h.leader ? '#6a1a1a' : '#8a4a28', pants: '#2a2420', hat: '#2a2420', extra: '#5a2a1a', scale: h.leader ? 46 : 40, bulk: h.leader ? 1.25 : 1, gun: h.leader ? 'assault' : 'old_rifle', pose: 'aim', twoHand: true });
   const npcMesh = () => R3D.humanoid({ skin: '#caa07a', shirt: '#c0792b', pants: '#3a3a40', hat: '#5a3a1a', scale: 38, pose: 'idle' });
 
   const sync = (map, list, make, upd) => {
@@ -234,7 +235,7 @@ R3D.mission = (() => {
     } else if (g.npc) { g.ents.remove(g.npc); g.npc = null; }
     // the player
     const pl = g.player; pl.position.set(p.x, 0, p.y); faceTo(pl, p.a || 0);
-    if (g.gunId !== m.wR.id) { g.gunId = m.wR.id; const gn = pl.userData.gun.children[0]; gn.geometry = R3D.box(.05, GUN_LEN[m.wR.id] || .6, .05); gn.position.y = -(GUN_LEN[m.wR.id] || .6) / 2 + .06; }
+    if (g.gunId !== m.wR.id) { g.gunId = m.wR.id; pl.userData.setGun(m.wR.id); }
     const bag = Math.min(1, Object.values(m.carried).reduce((s, n) => s + n, 0) / m.cap);
     pl.userData.own.extra.color.set(bag > .85 ? '#6a4a2a' : bag > .4 ? '#54482e' : '#3d3a30');
     R3D.pose(pl, p.walk || 0, p.moving ? 1 : 0, { crouch: m.sneak, swing: m.swing ? 1 - m.swing.t / .2 : undefined });

@@ -53,7 +53,7 @@ const R3D = (() => {
   R.basic = (color, op = 1) => new THREE.MeshBasicMaterial({ color, transparent: op < 1, opacity: op, depthWrite: op >= 1 });
   R.box = (w, h, d) => { const k = `b${w}|${h}|${d}`; let g = geos.get(k); if (!g) { g = new THREE.BoxGeometry(w, h, d); geos.set(k, g); } return g; };
   R.cyl = (rt, rb, h, seg = 12) => { const k = `c${rt}|${rb}|${h}|${seg}`; let g = geos.get(k); if (!g) { g = new THREE.CylinderGeometry(rt, rb, h, seg); geos.set(k, g); } return g; };
-  R.sphere = (r, seg = 10) => { const k = `s${r}|${seg}`; let g = geos.get(k); if (!g) { g = new THREE.SphereGeometry(r, seg, Math.max(6, seg - 2)); geos.set(k, g); } return g; };
+  R.sphere = (r, seg = 14) => { const k = `s${r}|${seg}`; let g = geos.get(k); if (!g) { g = new THREE.SphereGeometry(r, seg, Math.max(6, seg - 2)); geos.set(k, g); } return g; };
   R.cone = (r, h, seg = 8) => { const k = `n${r}|${h}|${seg}`; let g = geos.get(k); if (!g) { g = new THREE.ConeGeometry(r, h, seg); geos.set(k, g); } return g; };
   // a triangular prism (gable roof): footprint w x d, ridge along x, height h, sitting on y = 0
   R.prism = (w, h, d) => {
@@ -75,43 +75,96 @@ const R3D = (() => {
   };
   R.disposeTree = o => { o.traverse(c => { if (c.userData && c.userData.own) { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); } }); };
 
-  // ---------------------------------------------------------------- low-poly people (unit height 1, facing +x, feet at y = 0)
+  // ---------------------------------------------------------------- people (unit height 1, facing +x, feet at y = 0).
+  // Articulated: hips and knees, shoulders and elbows, a hip-pivoting upper body, rounded limbs, a face, belt and kit.
+  const caps = new Map();
+  R.cap = (r, len, seg = 8) => { const k = `${r}|${len}|${seg}`; let g = caps.get(k); if (!g) { g = new THREE.CapsuleGeometry(r, len, 4, seg); caps.set(k, g); } return g; };
+  R.blob = (r, seed = 0) => {   // a lumpy low-poly ball for foliage and bushes
+    const k = `blob${r}|${seed}`; let g = geos.get(k); if (g) return g;
+    g = new THREE.IcosahedronGeometry(r, 1); const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) { const f = 1 + (Math.sin(i * 12.9898 + seed * 78.233) * 43758.5453 % 1) * .22 - .11; p.setXYZ(i, p.getX(i) * f, p.getY(i) * f * .92, p.getZ(i) * f); }
+    g.computeVertexNormals(); geos.set(k, g); return g;
+  };
+  // gun models lie along -y from the hand so they follow the raised arm; lengths in unit-height fractions
+  const gunBuild = (grp, id) => {
+    while (grp.children.length) grp.remove(grp.children[0]);
+    const metal = grp.userData.metal, wood = grp.userData.wood, add = (w, len, d, pos, mat, x = 0, z = 0) => { const m = new THREE.Mesh(R.box(w, len, d), mat); m.position.set(x, -pos - len / 2 + .04, z); m.castShadow = true; grp.add(m); return m; };
+    const cyl = (r, len, pos, mat) => { const m = new THREE.Mesh(R.cyl(r, r, len, 8), mat); m.position.set(0, -pos - len / 2 + .04, 0); grp.add(m); return m; };
+    if (id === 'pistol') { add(.032, .12, .03, 0, metal); add(.024, .06, .026, -.045, wood, 0, 0).rotation.z = .25; add(.02, .04, .02, .07, metal, 0, 0); }
+    else if (id === 'smg') { add(.04, .22, .04, 0, metal); add(.02, .1, .02, .06, metal, 0, 0).position.x = .03; add(.03, .1, .026, -.06, wood); cyl(.01, .1, .2, metal); }
+    else if (id === 'shotgun') { add(.04, .22, .04, 0, wood); cyl(.014, .5, .1, metal); add(.036, .12, .036, .22, wood); add(.034, .14, .034, -.1, wood); }
+    else if (id === 'hunting') { add(.036, .2, .04, 0, wood); cyl(.011, .55, .12, metal); add(.026, .09, .026, .04, metal).position.x = 0; const sc = new THREE.Mesh(R.cyl(.016, .016, .12, 8), metal); sc.position.set(0, -.2, .035); grp.add(sc); add(.032, .16, .036, -.12, wood); }
+    else if (id === 'assault') { add(.044, .26, .044, 0, metal); cyl(.011, .36, .2, metal); add(.03, .1, .026, .06, metal, 0, 0).position.x = .03; add(.036, .16, .04, -.1, metal); add(.04, .05, .03, .0, wood, 0, 0); add(.012, .12, .012, .02, metal, 0, 0).position.x = -.03; }
+    else { add(.036, .22, .04, 0, wood); cyl(.012, .46, .1, metal); add(.026, .08, .026, .05, metal); add(.034, .16, .038, -.1, wood); }   // old rifle
+  };
   R.humanoid = o => {
-    const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
+    const root = new THREE.Group(), body = new THREE.Group(), upper = new THREE.Group(); root.add(body); body.add(upper); upper.position.y = .5;
     const own = {}, M = (k, c) => own[k] = new THREE.MeshLambertMaterial({ color: c, flatShading: true });
-    M('skin', o.skin || '#caa07a'); M('shirt', o.shirt || '#3a6a9a'); M('pants', o.pants || '#2b3340'); M('hat', o.hat || '#243444'); M('extra', o.extra || '#555');
-    const part = (w, h, d, mat, x, y, z, parent = body) => { const m = new THREE.Mesh(R.box(w, h, d), own[mat]); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
-    const limb = (z, mat, len, w) => { const p = new THREE.Group(); p.position.set(0, mat === 'pants' ? .46 : .73, z); body.add(p); part(w, len, w, mat, 0, -len / 2, 0, p); return p; };
-    const legL = limb(.065, 'pants', .46, .1), legR = limb(-.065, 'pants', .46, .1);
-    part(.12, .06, .12, o.boots ? 'extra' : 'pants', 0, 0, 0, legL).position.set(.02, -.45, 0); part(.12, .06, .12, o.boots ? 'extra' : 'pants', 0, 0, 0, legR).position.set(.02, -.45, 0);
-    part(.15, .3, .28, 'shirt', 0, .61, 0);
-    const head = part(.15, .15, .15, 'skin', .01, .85, 0); part(.17, .05, .17, 'hat', .005, .93, 0);
-    const armL = limb(.17, 'shirt', .3, .08), armR = limb(-.17, 'shirt', .3, .08);
-    part(.085, .08, .085, 'skin', 0, -.3, 0, armL); part(.085, .08, .085, 'skin', 0, -.3, 0, armR);
-    if (o.pack) part(.1, .2 * o.pack, .22, 'extra', -.13, .62, 0);
-    if (o.belly) part(.2, .18, .3, 'skin', .06, .56, 0);
-    if (o.plates) { part(.17, .3, .3, 'extra', 0, .61, 0); part(.19, .07, .19, 'extra', .005, .94, 0); part(.1, .1, .1, 'extra', 0, 0, 0, armL).position.set(0, -.02, 0); part(.1, .1, .1, 'extra', 0, 0, 0, armR).position.set(0, -.02, 0); }
+    M('skin', o.skin || '#caa07a'); M('shirt', o.shirt || '#3a6a9a'); M('pants', o.pants || '#2b3340'); M('hat', o.hat || '#243444'); M('extra', o.extra || '#555'); M('boot', o.boots ? (typeof o.boots === 'string' ? o.boots : '#2a2420') : '#2a2420'); M('dark', '#15161a'); M('metal', '#2a2d30'); M('wood', '#6a4a2a');
+    const zomb = o.pose === 'zombie';
+    if (zomb) M('blood', '#5a1010');
+    const part = (geo, mat, x, y, z, parent, sx = 1, sy = 1, sz = 1) => { const m = new THREE.Mesh(geo, own[mat]); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = true; parent.add(m); return m; };
+    const bx = (w, h, d, mat, x, y, z, parent) => part(R.box(w, h, d), mat, x, y, z, parent);
+    // legs: thigh (hip pivot) -> shin (knee pivot) -> boot
+    const leg = sd => {
+      const hip = new THREE.Group(); hip.position.set(0, .5, sd * .062); body.add(hip); part(R.cap(.05, .14, 8), 'pants', 0, -.125, 0, hip);
+      const knee = new THREE.Group(); knee.position.y = -.245; hip.add(knee); part(R.cap(.04, .14, 8), 'pants', 0, -.11, 0, knee);
+      part(R.cyl(.046, .042, .1, 9), 'boot', 0, -.17, 0, knee); bx(.15, .05, .09, 'boot', .035, -.225, 0, knee); bx(.04, .05, .092, 'dark', .095, -.225, 0, knee);
+      return [hip, knee];
+    };
+    const [legL, kneeL] = leg(1), [legR, kneeR] = leg(-1);
+    // pelvis, torso, belt
+    part(R.cap(.085, .03, 8), 'pants', 0, .035, 0, upper, .9, 1, 1.5);
+    part(R.cap(.09, .1, 8), 'shirt', 0, .17, 0, upper, .86, 1, 1.5);
+    bx(.158, .028, .272, 'dark', 0, .07, 0, upper); bx(.03, .03, .04, 'extra', .08, .07, 0, upper);
+    part(R.cyl(.027, .03, .06, 8), 'skin', 0, .335, 0, upper);
+    // head with a face
+    const head = new THREE.Group(); head.position.set(0, .4, 0); upper.add(head);
+    part(R.sphere(.075, 14), 'skin', 0, 0, 0, head, .95, 1.05, .92); bx(.02, .026, .02, 'skin', .075, -.01, 0, head);
+    if (!zomb) for (const sg of [-1, 1]) part(R.sphere(.011, 6), 'dark', .066, .014, sg * .032, head);
+    const hatM = part(new THREE.SphereGeometry(.081, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), 'hat', -.004, .008, 0, head, 1, zomb ? .8 : 1, 1);
+    if (!zomb) bx(.05, .01, .13, 'hat', .075, .026, 0, head);
+    if (zomb) { bx(.035, .022, .05, 'blood', .05, .045, .02, head); bx(.04, .03, .02, 'dark', .071, -.032, 0, head); }   // gash on the scalp, open mouth
+    // arms: shoulder -> elbow -> hand
+    const arm = sd => {
+      const sh = new THREE.Group(); sh.position.set(0, .29, sd * .152); upper.add(sh);
+      part(R.sphere(.04, 8), 'shirt', 0, 0, 0, sh); part(R.cap(.034, .1, 8), 'shirt', 0, -.095, 0, sh);
+      const el = new THREE.Group(); el.position.y = -.185; sh.add(el);
+      part(R.cap(.03, .09, 8), zomb ? 'skin' : 'shirt', 0, -.07, 0, el); part(R.sphere(.034, 8), 'skin', 0, -.165, 0, el);
+      if (zomb) bx(.04, .05, .04, 'blood', .02, -.07, sd * .01, el);
+      return [sh, el];
+    };
+    const [armL, elbowL] = arm(1), [armR, elbowR] = arm(-1);
+    // kit: backpack, straps, plates, belly
+    if (o.pack) { bx(.1, .2 * o.pack, .21, 'extra', -.125, .17, 0, upper); bx(.09, .05, .19, 'dark', -.125, .17 + .1 * o.pack + .025, 0, upper); for (const sg of [-1, 1]) bx(.17, .02, .03, 'dark', -.01, .24, sg * .07, upper); }
+    if (o.belly) part(R.sphere(.12, 10), 'skin', .06, .1, 0, upper, 1, .9, 1.1);
+    if (o.plates) { bx(.17, .26, .3, 'extra', 0, .16, 0, upper); for (const sg of [-1, 1]) part(R.sphere(.06, 8), 'extra', 0, .3, sg * .155, upper, 1, .7, 1); bx(.19, .09, .19, 'extra', .004, .04, 0, head); }
+    if (!zomb && !o.plates) bx(.04, .08, .05, 'extra', .02, .02, -.1, upper);   // pouch / holster on the belt
+    if (zomb) { for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; bx(.03, .06 + (i % 2) * .03, .012, 'shirt', Math.cos(a) * .075, -.01, Math.sin(a) * .125, upper).rotation.z = (i % 2 ? .1 : -.1); } bx(.02, .09, .09, 'blood', .082, .17, -.04, upper); bx(.02, .06, .06, 'dark', .082, .13, .07, upper); }
+    // gun
     let gun = null;
-    if (o.gun) { gun = new THREE.Group(); gun.position.set(0, -.3, 0); armR.add(gun); const gm = new THREE.MeshLambertMaterial({ color: '#2a2d30', flatShading: true }); own.gun = gm; const b = new THREE.Mesh(R.box(.05, o.gun, .05), gm); b.position.set(0, -o.gun / 2 + .06, 0); b.castShadow = true; gun.add(b); }
-    const s = o.scale || 1, bx = o.bulk || 1; root.scale.set(s * bx, s, s * bx);
-    root.userData = { own, body, legL, legR, armL, armR, head, gun, mats: Object.values(own), lean: o.lean || 0, pose: o.pose || 'idle' };
+    if (o.gun) { gun = new THREE.Group(); gun.position.set(0, -.165, 0); elbowR.add(gun); gun.userData.metal = own.metal; gun.userData.wood = own.wood; gunBuild(gun, typeof o.gun === 'string' ? o.gun : 'old_rifle'); }
+    const s = o.scale || 1, bxs = o.bulk || 1; root.scale.set(s * bxs, s, s * bxs);
+    root.userData = { own, body, upper, legL, legR, kneeL, kneeR, armL, armR, elbowL, elbowR, head, gun, mats: Object.values(own), lean: o.lean || 0, pose: o.pose || 'idle', setGun: id => { if (gun) gunBuild(gun, id); } };
     return root;
   };
   // ph = walk phase, mv = 0..1 how fast the legs move
   R.pose = (g, ph, mv, extra = {}) => {
-    const u = g.userData, sw = Math.sin(ph * 6.2) * mv, pose = extra.pose || u.pose;
+    const u = g.userData, a = ph * 6.2, sw = Math.sin(a) * mv, cs = Math.cos(a) * mv, pose = extra.pose || u.pose;
     u.legL.rotation.z = sw * .8; u.legR.rotation.z = -sw * .8;
+    u.kneeL.rotation.z = -(.06 + Math.max(0, cs) * .95 * (mv > 0 ? 1 : 0)); u.kneeR.rotation.z = -(.06 + Math.max(0, -cs) * .95 * (mv > 0 ? 1 : 0));
+    u.upper.rotation.z = 0; u.head.rotation.z = 0;
     if (pose === 'zombie') {
-      const sway = Math.sin(ph * 3.1) * .12; u.armL.rotation.z = 1.35 + sway; u.armR.rotation.z = 1.25 - sway;
-      u.body.rotation.z = -(.16 + (u.lean || 0)) - (extra.chase ? .1 : 0); u.head.rotation.z = .1 + Math.sin(ph * 2) * .06;
+      const sway = Math.sin(ph * 3.1) * .12; u.armL.rotation.z = 1.35 + sway; u.armR.rotation.z = 1.25 - sway; u.elbowL.rotation.z = .3 + sway; u.elbowR.rotation.z = .4 - sway;
+      u.upper.rotation.z = -(.2 + (u.lean || 0)) - (extra.chase ? .12 : 0); u.head.rotation.z = .25 + Math.sin(ph * 2) * .08;
     } else if (pose === 'aim') {
-      u.armR.rotation.z = 1.5; u.armL.rotation.z = extra.twoHand ? 1.35 : -sw * .6; u.body.rotation.z = 0;
+      u.armR.rotation.z = 1.5; u.elbowR.rotation.z = .04; u.armL.rotation.z = extra.twoHand ? 1.25 : -sw * .6; u.elbowL.rotation.z = extra.twoHand ? .75 : .15;
     } else {
-      u.armL.rotation.z = -sw * .7; u.armR.rotation.z = sw * .7; u.body.rotation.z = 0;
+      u.armL.rotation.z = -sw * .7; u.armR.rotation.z = sw * .7; u.elbowL.rotation.z = .15 + Math.max(0, -sw) * .6; u.elbowR.rotation.z = .15 + Math.max(0, sw) * .6;
     }
-    if (extra.swing !== undefined) u.armR.rotation.z = -.8 + extra.swing * 2.6;
-    u.body.position.y = Math.abs(Math.sin(ph * 6.2)) * .02 * mv - (extra.crouch ? .08 : 0);
-    if (extra.crouch) u.body.rotation.z -= .35;
+    if (extra.swing !== undefined) { u.armR.rotation.z = -.8 + extra.swing * 2.6; u.elbowR.rotation.z = .2; }
+    u.body.position.y = Math.abs(sw) * .018;
+    if (extra.crouch) { u.legL.rotation.z = .75; u.legR.rotation.z = .45; u.kneeL.rotation.z = -1.35; u.kneeR.rotation.z = -1.05; u.body.position.y = -.115; u.upper.rotation.z -= .35; }
   };
   R.tint = (g, hex, amt) => { for (const m of g.userData.mats) { if (amt > 0) { m.emissive.set(hex); m.emissiveIntensity = amt; } else m.emissiveIntensity = 0; } };
 
@@ -145,8 +198,29 @@ const R3D = (() => {
     if (!burnt) { for (const sz of [-1, 1]) { R.mesh(R.box(.06 * L + .05, .09 * H, .2 * Wd), R.basic('#fff2b0'), L / 2, y0 + H * .17, sz * Wd * .33, g, false); R.mesh(R.box(.05 * L + .04, .07 * H, .16 * Wd), R.basic('#d02a2a'), -L / 2, y0 + H * .2, sz * Wd * .36, g, false); } }
     P(L / 2 - .02, y0, 0, .08, .08 * H, Wd * .98, '#2a2a2a'); P(-L / 2 - .06, y0, 0, .08, .08 * H, Wd * .98, '#2a2a2a');
     if (!ev) R.mesh(R.cyl(.03 * Wd, .03 * Wd, .12 * L, 6), R.mat('#444'), -L / 2 - .02, y0 + .02, Wd * .3, g).rotation.z = Math.PI / 2;
+    // finer detail: door seams and handles, mirrors, grille, plates, wheel arches, tyres with spoked rims
+    const dh = ({ car: .5, pickup: .52, van: .62, truck: .5, suv: .64, hatch: .54 }[t] || .5) * H, seam = burnt ? '#050505' : '#12141a', xs = t === 'truck' ? [.3, .12] : [.12, -.14];
+    for (const sz of [-1, 1]) {
+      for (const x of xs) { P(x * L, y0 + H * .04, sz * (Wd / 2 + .004), .014 * L + .01, dh * .92, .012, seam); P(x * L + .06 * L, y0 + dh * .55, sz * (Wd / 2 + .012), .05 * L, .018 * H, .02, burnt ? '#222' : '#c8ccd0'); }
+      P(L * (t === 'truck' ? .3 : .2), y0 + dh * .86, sz * (Wd / 2 + .06), .05 * L, .05 * H, .06 * Wd, '#15161a');   // mirror
+      P(L * .31, y0, sz * (Wd / 2 - .02), .22 * L, .02 * H, .02, '#0a0a0c');                                          // sill
+    }
+    if (!burnt) {
+      P(L / 2 + .005, y0 + H * .1, 0, .03, H * .11, Wd * .5, '#0d0e12'); for (let i = 0; i < 3; i++) P(L / 2 + .02, y0 + H * (.12 + i * .03), 0, .012, .008 * H, Wd * .5, '#9aa0a6');
+      P(L / 2 + .03, y0 + .01, 0, .012, H * .07, Wd * .26, '#e8e8e0'); P(-L / 2 - .03, y0 + .01, 0, .012, H * .07, Wd * .26, '#e8e8e0');
+    }
+    if (t === 'truck') { for (const sz of [-1, 1]) P(-L * .46, y0 + H * .03, sz * Wd * .46, .02, H * .12, .12 * Wd, '#15161a'); P(-L * .5 - .01, y0 + H * .1, 0, .02, H * .78, .02, seam); if (!burnt) P(L * .37, y0 + H * .52, 0, L * .08, .04 * H, Wd * .5, '#e8a020', { em: '#e8a020', ei: .6 }); }
+    if (t === 'van') P(-L * .5 - .01, y0 + H * .05, 0, .02, H * .5, .02, seam);
+    if (t === 'pickup') for (let i = 0; i < 4; i++) P(-L * .32 + i * L * .13, y0 + H * .27, 0, .03, .015 * H, Wd * .8, '#1c1c1c');   // bed ribs
     const wx = t === 'truck' ? [.34, -.3, -.4] : [.31, -.31];
-    for (const x of wx) for (const sz of [-1, 1]) { const w = R.mesh(R.cyl(wr, wr, Wd * .14, 12), R.mat('#111'), x * L, wr, sz * (Wd / 2 - Wd * .04), g); w.rotation.x = Math.PI / 2; const hub = R.mesh(R.cyl(wr * .5, wr * .5, Wd * .15, 8), R.mat(burnt ? '#222' : '#aab'), x * L, wr, sz * (Wd / 2 - Wd * .035), g, false); hub.rotation.x = Math.PI / 2; }
+    for (const x of wx) for (const sz of [-1, 1]) {
+      const wz = sz * (Wd / 2 - Wd * .04);
+      const arch = R.mesh(R.cyl(wr * 1.22, wr * 1.22, Wd * .06, 14), R.mat('#0a0a0c'), x * L, wr, sz * (Wd / 2 - Wd * .005), g, false); arch.rotation.x = Math.PI / 2;
+      const w = R.mesh(R.cyl(wr, wr, Wd * .15, 16), R.mat('#0e0e10'), x * L, wr, wz, g); w.rotation.x = Math.PI / 2;
+      const rim = R.mesh(R.cyl(wr * .62, wr * .62, Wd * .16, 12), R.mat(burnt ? '#222' : '#b4bac2'), x * L, wr, wz + sz * .004, g, false); rim.rotation.x = Math.PI / 2;
+      for (let k = 0; k < 5; k++) { const sp = R.mesh(R.box(wr * 1.0, wr * .12, Wd * .17), R.mat(burnt ? '#111' : '#7a8088'), x * L, wr, wz + sz * .006, g, false); sp.rotation.z = k * Math.PI / 5; }
+      R.mesh(R.cyl(wr * .14, wr * .14, Wd * .18, 6), R.mat('#2a2c30'), x * L, wr, wz + sz * .01, g, false).rotation.x = Math.PI / 2;
+    }
     return g;
   };
 

@@ -45,14 +45,16 @@ R3D.base = (() => {
     for (let x = -60; x < 80; x += 3) R3D.mesh(R3D.box(1.5, .06, .12), R3D.mat('#d8d8c0'), x, .06, GY + 4.6, sc, false);
     // scenery: trees, bushes, boards and the cats
     const tree = (x, z, sc2 = 1) => {
-      const t = new THREE.Group(); t.position.set(x, 0, z);
-      R3D.mesh(R3D.cyl(.12 * sc2, .2 * sc2, 1.6 * sc2, 7), R3D.mat('#5a3d22'), 0, .8 * sc2, 0, t);
-      for (const [dx, dy, dz, r, c] of [[0, 2.3, 0, 1.15, '#2f6a2a'], [.5, 1.9, .3, .85, '#3a7a30'], [-.45, 2.0, -.3, .9, '#2a5e26']]) R3D.mesh(R3D.sphere(r * sc2, 9), R3D.mat(c), dx * sc2, dy * sc2, dz * sc2, t);
+      const t = new THREE.Group(); t.position.set(x, 0, z); t.rotation.y = hash(x, z) * 6;
+      R3D.mesh(R3D.cyl(.1 * sc2, .21 * sc2, 1.7 * sc2, 9), R3D.mat('#5a3d22'), 0, .85 * sc2, 0, t); R3D.mesh(R3D.cyl(.25 * sc2, .3 * sc2, .2 * sc2, 9), R3D.mat('#4a3219'), 0, .1 * sc2, 0, t);
+      for (const [dx, dz, ry] of [[.35, 0, -.9], [-.3, .2, .8], [0, -.35, .2]]) { const br = R3D.mesh(R3D.cyl(.035 * sc2, .06 * sc2, .9 * sc2, 6), R3D.mat('#5a3d22'), dx * sc2, 1.6 * sc2, dz * sc2, t); br.rotation.z = dx > 0 ? -.8 : dx < 0 ? .8 : 0; br.rotation.x = dz * 1.6; }
+      const greens = ['#2f6a2a', '#3a7a30', '#2a5e26', '#44883a', '#356f2c'];
+      for (let i = 0; i < 7; i++) { const a = i * 2.4, rr = i ? .75 : 0, c = R3D.mesh(R3D.blob((i ? .62 : 1.0) * sc2, i), R3D.mat(greens[i % 5]), Math.cos(a) * rr * sc2, (2.0 + (i % 3) * .3 + (i ? 0 : .35)) * sc2, Math.sin(a) * rr * sc2, t); c.rotation.y = i; }
       sc.add(t);
     };
     for (const [x, y] of TREES) tree(x * GSCALE, y * GSCALE, 1);
     for (const [x, y, s2] of TREES_FAR) tree(x * GSCALE, y * GSCALE, s2 * 1.1);
-    for (const [x, y] of BUSHES) { const b = R3D.mesh(R3D.sphere(.5, 8), R3D.mat('#3a7a32'), x * GSCALE, .35, y * GSCALE, sc); b.scale.y = .8; }
+    for (const [x, y] of BUSHES) for (let i = 0; i < 3; i++) { const bu = R3D.mesh(R3D.blob(.34 - i * .04, i + 9), R3D.mat(['#3a7a32', '#2f6a2a', '#44883a'][i]), x * GSCALE + Math.cos(i * 2.1) * .28, .28, y * GSCALE + Math.sin(i * 2.1) * .28, sc); }
     for (const [x, y] of PILES) { const p = new THREE.Group(); p.position.set(x * GSCALE, 0, y * GSCALE); for (let i = 0; i < 4; i++) R3D.mesh(R3D.box(1.1, .08, .6), R3D.mat('#d8d6b8'), 0, .06 + i * .09, 0, p).rotation.y = i * .1; R3D.mesh(R3D.box(.7, .25, .4), R3D.mat('#3a6a8a'), 1.1, .35, .1, p); sc.add(p); }
     for (const [x, y, c] of CATS) { const k = new THREE.Group(); k.position.set(x * GSCALE, 0, y * GSCALE); R3D.mesh(R3D.box(.34, .16, .14), R3D.mat(c), 0, .12, 0, k); R3D.mesh(R3D.box(.14, .14, .14), R3D.mat(c), .2, .2, 0, k); sc.add(k); }
     g.bldRoot = new THREE.Group(); sc.add(g.bldRoot); g.ents = new THREE.Group(); sc.add(g.ents);
@@ -78,14 +80,27 @@ R3D.base = (() => {
   const panels = (p, w, d, H, rh, z0, z1, rows) => {   // solar panels on both slopes of a ridge running along z
     const span = w / 2 + .3, ang = Math.atan2(rh, span), len = Math.hypot(span, rh) - .35;
     for (const sd of [-1, 1]) for (let i = 0; i < rows; i++) {
-      const pz = z0 + (z1 - z0) * (i + .5) / rows, m = R3D.mesh(R3D.box(len * .86, .05, (z1 - z0) / rows * .86), R3D.mat('#15305c'), w / 2 + sd * (span / 2 - .05), H + rh / 2 + .07, pz, p, false);
+      const pz = z0 + (z1 - z0) * (i + .5) / rows, px = w / 2 + sd * (span / 2 - .05), fr = R3D.mesh(R3D.box(len * .9, .045, (z1 - z0) / rows * .92), R3D.mat('#aeb4ba'), px, H + rh / 2 + .06, pz, p, false), m = R3D.mesh(R3D.box(len * .84, .06, (z1 - z0) / rows * .84), R3D.mat('#15305c'), px, H + rh / 2 + .075, pz, p, false);
+      fr.rotation.z = sd < 0 ? ang : -ang;
+      for (let c = 1; c < 3; c++) { const ln = R3D.mesh(R3D.box(len * .84, .065, .02), R3D.mat('#4a6aa0'), px, H + rh / 2 + .078, pz + ((z1 - z0) / rows * .84) * (c / 3 - .5), p, false); ln.rotation.z = sd < 0 ? ang : -ang; }
       m.rotation.z = sd < 0 ? ang : -ang;
     }
   };
-  const windows = (p, w, d, H, mats) => {
-    const win = g.win;
-    for (let i = 0; i < 4; i++) for (const sx of [0, w]) { const m = R3D.mesh(R3D.box(.06, .55, .7), win, sx, H * .55, d * (i + .5) / 4, p, false); }
-    for (const z of [.9, w - .9]) R3D.mesh(R3D.box(.7, .55, .06), win, z, H * .55, d, p, false);
+  const windows = (p, w, d, H) => {
+    const win = g.win, fr = R3D.mat('#e8e6de'), one = (x, z, alongX) => {   // frame, glass, mullions, sill, shutters
+      const ww = alongX ? .78 : .1, dd = alongX ? .1 : .78, y = H * .55;
+      R3D.mesh(R3D.box(ww + (alongX ? .1 : 0), .66, dd + (alongX ? 0 : .1)), fr, x, y, z, p, false);
+      R3D.mesh(R3D.box(ww * (alongX ? .86 : 1.2), .54, dd * (alongX ? 1.2 : .86)), win, x, y, z, p, false);
+      R3D.mesh(R3D.box(alongX ? .03 : .13, .54, alongX ? .13 : .03), fr, x, y, z, p, false); R3D.mesh(R3D.box(alongX ? .8 : .13, .03, alongX ? .13 : .8), fr, x, y, z, p, false);
+      R3D.mesh(R3D.box(alongX ? .9 : .2, .05, alongX ? .2 : .9), R3D.mat('#bcbab2'), x + (alongX ? 0 : (x > 1 ? .05 : -.05)), y - .36, z + (alongX ? .05 : 0), p, false);
+    };
+    for (let i = 0; i < 4; i++) for (const sx of [0, w]) one(sx, d * (i + .5) / 4, false);
+    for (const z of [.9, w - .9]) one(z, d, true);
+  };
+  const eaves = (p, w, d, H, rh, k) => {   // ridge cap, fascia boards, gutters
+    R3D.mesh(R3D.box(.14, .1, d + .7), R3D.mat(col('#5a2018', k)), w / 2, H + rh + .02, d / 2, p);
+    for (const sx of [-.3, w + .3]) { R3D.mesh(R3D.box(.08, .12, d + .7), R3D.mat('#e8e6de'), sx, H - .04, d / 2, p, false); R3D.mesh(R3D.cyl(.05, .05, d + .6, 8), R3D.mat('#8a8e92'), sx * (sx < 0 ? .85 : 1.0) + (sx < 0 ? .0 : 0), H - .16, d / 2, p, false).rotation.x = Math.PI / 2; }
+    for (const z of [-.3, d + .3]) R3D.mesh(R3D.box(w + .7, .1, .08), R3D.mat('#e8e6de'), w / 2, H - .02, z, p, false);
   };
 
   const MODELS = {
@@ -94,7 +109,8 @@ R3D.base = (() => {
       blk(p, 0, 0, 0, w, H, d, col('#b9bdb6', k)); roofOf(p, w, d, H, rh, col('#7a2e24', k));
       blk(p, w * .6, H + rh * .5, d * .25, .45, .9, .45, col('#8a8a86', k));   // chimney
       blk(p, 2.2, 0, d, .9, 1.35, .1, '#5a3a22'); blk(p, 1.9, 0, d, 1.5, .12, .5, '#8a8c8a');   // door + step
-      windows(p, w, d, H); panels(p, w, d, H, rh, .6, d - .6, 5);
+      windows(p, w, d, H); eaves(p, w, d, H, rh, k); panels(p, w, d, H, rh, .6, d - .6, 5);
+      blk(p, 2.0, 0, d - .02, 1.1, 1.5, .06, '#e8e6de'); R3D.mesh(R3D.sphere(.04, 6), R3D.mat('#d8b030'), 2.95, .75, d + .12, p); blk(p, 1.9, 1.5, d - .02, 1.3, .08, .3, '#bcbab2');   // door frame, knob, canopy
     },
     workshop(b, o, p) {
       const w = b.w, d = b.h, [H, rh] = HT.workshop, k = o.k;
@@ -206,9 +222,9 @@ R3D.base = (() => {
   const ZSKIN = { walker: '#7d9468', brute: '#8c946a', runner: '#a3ad84', spitter: '#97c93f', armored: '#6f8a6c' };
   const CLOTH = ['#5a5348', '#3f4a56', '#6a4a3a', '#4a5a4a', '#6a6a6a', '#4a3a5a'];
   const attackerMesh = z => {
-    if (z.raider) return R3D.humanoid({ skin: '#c89a74', shirt: '#8a4a28', pants: '#2a2420', hat: '#2a2420', scale: 1.2, gun: .6, pose: 'aim', twoHand: true });
+    if (z.raider) return R3D.humanoid({ skin: '#c89a74', shirt: '#8a4a28', pants: '#2a2420', hat: '#2a2420', scale: 1.2, gun: 'old_rifle', pose: 'aim', twoHand: true });
     const [s, bulk] = ZB[z.kind] || ZB.walker, skin = ZSKIN[z.kind] || ZSKIN.walker, h = R3D.humanoid({ skin, shirt: z.kind === 'spitter' ? '#566a2a' : CLOTH[Math.floor(z.ph * 6) % 6], pants: '#303236', hat: z.kind === 'armored' ? '#40464c' : skin, extra: '#3a4046', scale: s, bulk, pose: 'zombie', belly: z.kind === 'spitter', plates: z.kind === 'armored', lean: z.kind === 'runner' ? .22 : 0 });
-    for (const sg of [-1, 1]) { const e = new THREE.Mesh(R3D.box(.02, .025, .03), R3D.basic('#ff2a1e')); e.position.set(.085, .02, sg * .04); h.userData.head.add(e); }
+    for (const sg of [-1, 1]) { const e = new THREE.Mesh(R3D.box(.02, .025, .03), R3D.basic('#ff2a1e')); e.position.set(.07, .016, sg * .04); h.userData.head.add(e); }
     return h;
   };
 

@@ -61,7 +61,7 @@ R3D.mission = (() => {
     }
     // everything else that moves or changes
     g.ents = new THREE.Group(); sc.add(g.ents);
-    g.bullets = R3D.pool(() => { const o = R3D.mesh(R3D.box(16, 1.8, 1.8), R3D.basic('#ffe8a0'), 0, 0, 0, g.ents, false); return o; });
+    g.bullets = R3D.pool(() => { const o = R3D.mesh(R3D.box(32, 1.5, 1.5), R3D.basic('#ffe8a0'), 0, 0, 0, g.ents, false); return o; });
     g.ebullets = R3D.pool(() => R3D.mesh(R3D.box(14, 2.4, 2.4), R3D.basic('#ff7a30'), 0, 0, 0, g.ents, false));
     g.flames = R3D.pool(() => { const f = R3D.flame(); g.ents.add(f); return f; });
     g.rings = R3D.pool(() => { const o = new THREE.Mesh(new THREE.RingGeometry(.96, 1, 48), new THREE.MeshBasicMaterial({ color: '#ffe8aa', transparent: true, opacity: .4, side: THREE.DoubleSide, depthWrite: false })); o.rotation.x = -Math.PI / 2; o.position.y = 1; g.ents.add(o); return o; });
@@ -79,6 +79,7 @@ R3D.mission = (() => {
     g.ents.add(g.player); g.player.userData.own.extra.color.set(L.pack || '#4a4438');
     g.gunId = m.wR.id;
     g.blade.material.color.set(m.wM.col || '#9aa');
+    M.fxBuild(g);
     M.decor(m, g);
     // hotwiring: the car you work on gets its driver door opened, headlights on, sparks, and hazard lights + a siren glow when its alarm is going
     g.carFx = new THREE.Group(); g.carFx.visible = false; g.ents.add(g.carFx);
@@ -391,10 +392,10 @@ R3D.mission = (() => {
   const humanMesh = h => R3D.humanoid({ skin: '#c89a74', shirt: h.leader ? '#6a1a1a' : '#8a4a28', pants: '#2a2420', hat: h.leader ? '#15110e' : ['#2a2420', '#3a2a1a', '#15110e'][Math.floor(h.wa * 3) % 3], variant: h.leader ? 'leader' : 'raider', extra: '#5a2a1a', scale: h.leader ? 46 : 40, bulk: h.leader ? 1.25 : 1, gun: h.leader ? 'assault' : 'old_rifle', pose: 'aim', twoHand: true });
   const npcMesh = () => R3D.humanoid({ skin: '#caa07a', shirt: '#c0792b', pants: '#3a3a40', hat: '#5a3a1a', scale: 38, pose: 'idle' });
 
-  const sync = (map, list, make, upd) => {
+  const sync = (map, list, make, upd, onGone) => {
     const seen = new Set();
     for (const o of list) { let r = map.get(o); if (!r) { r = make(o); map.set(o, r); M.cur.ents.add(r); } upd(r, o); seen.add(o); }
-    for (const [o, r] of map) if (!seen.has(o)) { M.cur.ents.remove(r); const mt = r.userData && r.userData.mats; if (mt) mt.forEach(x => x.dispose()); map.delete(o); }
+    for (const [o, r] of map) if (!seen.has(o)) { if (onGone && onGone(o, r) === true) { map.delete(o); continue; } M.cur.ents.remove(r); const mt = r.userData && r.userData.mats; if (mt) mt.forEach(x => x.dispose()); map.delete(o); }
   };
   const faceTo = (obj, a) => { obj.rotation.y = -a; };
 
@@ -403,6 +404,98 @@ R3D.mission = (() => {
   M.aim = m => {   // the mouse ray at chest height becomes the 2D aim point the mission logic already understands
     const g = m.gl; if (!g || !g.ready) return;
     const p = R3D.ground(g.camera, 18); if (p) { mouse.x = p.x; mouse.y = p.z; }
+  };
+
+
+  // ---------------------------------------------------------------- combat feel: muzzle flashes, shell casings, sparks, blood, falling bodies, recoil, bloody footprints
+  const BLOOD = { z: ['#4a6a10', '#2f4a0a', '#6a8a20', '#3a5a10'], h: ['#a01010', '#701010', '#c02020'] }, SPARKC = ['#fff2b0', '#ffc060', '#ff9040'];
+  const KICK = { pistol: 3, smg: 2, old_rifle: 5, assault: 4, hunting: 7, shotgun: 11 }, TIP = { pistol: .16, smg: .34, shotgun: .65, hunting: .72, assault: .66, old_rifle: .66 };
+  const rnd = (a, b) => a + Math.random() * (b - a), pick1 = l => l[Math.floor(Math.random() * l.length)];
+  const flashMesh = () => {
+    const g2 = new THREE.Group(), mat = () => new THREE.MeshBasicMaterial({ color: '#ffd070', transparent: true, opacity: .95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(2.6, 17, 8), mat()); cone.rotation.z = -Math.PI / 2; cone.position.x = 8; g2.add(cone);
+    for (const r of [0, Math.PI / 2]) { const pl = new THREE.Mesh(new THREE.PlaneGeometry(14, 5), mat()); pl.rotation.x = r; pl.position.x = 3; g2.add(pl); }
+    g2.add(new THREE.Mesh(R3D.sphere(3, 8), mat())); g2.visible = false; return g2;
+  };
+  M.fxBuild = g => {
+    g.fx = []; g.dying = []; g.pools = []; g.bPrev = new Map(); g.kickX = 0; g.kickZ = 0; g.lastFlash = 0; g.decalT = 0;
+    g.sparksP = R3D.particles(300, 2.4); g.sparksP.material.blending = THREE.AdditiveBlending; g.bloodP = R3D.particles(500, 3.6); g.ents.add(g.sparksP, g.bloodP);
+    g.cas = []; g.casPool = R3D.pool(() => { const c = new THREE.Mesh(R3D.cyl(.9, .9, 3.4, 6), new THREE.MeshLambertMaterial({ color: '#d8a850' })); g.ents.add(c); return c; });
+    g.flashP = flashMesh(); g.ents.add(g.flashP); g.flashH = []; for (let i = 0; i < 6; i++) { const f = flashMesh(); g.ents.add(f); g.flashH.push(f); }
+    g.pl = null;
+  };
+  M.blood = (g, x, y, z, dx, dz, n, type, speed) => { const a0 = Math.atan2(dz, dx); for (let i = 0; i < n; i++) { const a = a0 + rnd(-.55, .55), s = rnd(.3, 1) * speed; g.fx.push({ k: 'b', x, y, z, vx: Math.cos(a) * s, vz: Math.sin(a) * s, vy: rnd(30, 130), l: rnd(.5, .9), c: pick1(BLOOD[type]) }); } };
+  M.sparks = (g, x, y, z, dx, dz) => { const a0 = Math.atan2(-dz, -dx); for (let i = 0; i < 9; i++) { const a = a0 + rnd(-1.1, 1.1), s = rnd(70, 220); g.fx.push({ k: 's', x, y, z, vx: Math.cos(a) * s, vz: Math.sin(a) * s, vy: rnd(20, 150), l: rnd(.25, .55), c: pick1(SPARKC) }); } };
+  M.combatFx = (m, g, dt, t) => {
+    const p = m.p, a = p.a || 0, dir = { x: Math.cos(a), z: Math.sin(a) }, pl = g.player;
+    pl.updateMatrixWorld(true);
+    // ---- a shot: flash at the muzzle, a casing, recoil
+    const vec = new THREE.Vector3(); pl.userData.gun.getWorldPosition(vec);
+    if (m.flashT > g.lastFlash + .02) {
+      const id = m.wR.id, k = KICK[id] || 4 * (SET.shake ? SET.shake : 0);
+      g.kickX -= dir.x * (KICK[id] || 4) * (SET.shake || 0); g.kickZ -= dir.z * (KICK[id] || 4) * (SET.shake || 0);
+      const sh = id === 'shotgun';
+      const rx = -dir.z, rz = dir.x; g.cas.push({ col: sh ? '#c8362a' : '#d8a850', sc: sh ? 1.5 : 1, x: vec.x, y: vec.y, z: vec.z, vx: rx * rnd(60, 110) - dir.x * rnd(0, 30), vz: rz * rnd(60, 110) - dir.z * rnd(0, 30), vy: rnd(90, 160), sx: rnd(-14, 14), sy: rnd(-14, 14), age: 0 });
+      if (g.cas.length > 34) g.cas.shift();
+    }
+    g.lastFlash = m.flashT;
+    const id = m.wR.id, L = (TIP[id] || .6) * 40;
+    g.flashP.visible = m.flashT > 0; if (g.flashP.visible) { g.flashP.position.set(vec.x + dir.x * L, vec.y, vec.z + dir.z * L); g.flashP.rotation.y = -a; g.flashP.scale.setScalar(id === 'shotgun' ? 1.6 : id === 'pistol' ? .7 : 1); g.flashP.children[0].material.opacity = .6 + Math.random() * .4; }
+    m.humans.forEach((h, i) => { const f = g.flashH[i % 6], rec = g.hs.get(h); if (h.flash > 0 && rec) { rec.updateMatrixWorld(true); const gp = new THREE.Vector3(); rec.userData.gun.getWorldPosition(gp); f.visible = true; f.position.set(gp.x + Math.cos(h.a) * 26, gp.y, gp.z + Math.sin(h.a) * 26); f.rotation.y = -h.a; } else if (i < 6) f.visible = false; });
+    // ---- casings fall, bounce and rest
+    g.casPool.begin();
+    for (const c of g.cas) { c.age += dt; if (c.rest === undefined) { c.vy -= 700 * dt; c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt; if (c.y <= 1.2) { c.y = 1.2; if (Math.abs(c.vy) < 40) { c.rest = 1; c.vx = c.vz = 0; } else { c.vy *= -.35; c.vx *= .55; c.vz *= .55; c.sx *= .5; c.sy *= .5; } } } }
+    g.cas = g.cas.filter(c => c.age < 8);
+    for (const c of g.cas) { const o = g.casPool.next(); o.material.color.set(c.col); o.scale.setScalar(c.sc); o.position.set(c.x, c.y, c.z); o.rotation.set(c.rest ? Math.PI / 2 : c.age * c.sx, c.rest ? c.sy : 0, c.rest ? 0 : c.age * c.sy); }
+    g.casPool.end();
+    // ---- bullets that vanished against a wall or the edge spark; the ones that hit flesh are handled below
+    const cur = new Set(m.bullets), B = m.bounds;
+    for (const [b, s] of g.bPrev) if (!cur.has(b)) {
+      const x = s.x + s.vx * dt * .5, y = s.y + s.vy * dt * .5, len = Math.hypot(s.vx, s.vy) || 1;
+      const nearFlesh = m.zombies.some(z => Math.hypot(z.x - x, z.y - y) < z.r + 12) || m.humans.some(h => Math.hypot(h.x - x, h.y - y) < 20);
+      const wall = m.walls.some(w => (w.style !== 'water' && w.style !== 'paint') && x > w.x - 7 && x < w.x + w.w + 7 && y > w.y - 7 && y < w.y + w.h + 7) || x < B.x0 - 2 || x > B.x1 + 2 || y < B.y0 - 2 || y > B.y1 + 2;
+      if (wall && !nearFlesh && Math.hypot(x - p.x, y - p.y) > 30) M.sparks(g, x, 18 + rnd(-4, 4), y, s.vx / len, s.vy / len);
+    }
+    g.bPrev = new Map(m.bullets.map(b => [b, { x: b.x, y: b.y, vx: b.vx, vy: b.vy }]));
+    // ---- particles (sparks, blood)
+    for (const f of g.fx) {
+      f.vy -= (f.k === 'b' ? 520 : 420) * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt; f.l -= dt;
+      if (f.y <= .6) { f.y = .6; if (f.k === 's') { f.vy *= -.3; f.vx *= .5; f.vz *= .5; } else { f.vy = 0; f.vx *= .3; f.vz *= .3; f.l -= dt * 1.5; if (!f.stain && g.decalT <= 0 && Math.random() < .08 && m.fctx) { f.stain = 1; g.decalT = .3; const q = m.fctx; q.fillStyle = f.c; q.globalAlpha = .55; q.beginPath(); q.ellipse(f.x, f.z, rnd(1.5, 4), rnd(1, 3), rnd(0, 3), 0, 7); q.fill(); q.globalAlpha = 1; m.floorDirty = true; } } }
+    }
+    g.decalT -= dt; if (g.fx.length > 700) g.fx.splice(0, g.fx.length - 700);
+    g.fx = g.fx.filter(f => f.l > 0);
+    g.sparksP.userData.set(g.fx.filter(f => f.k === 's'), f => [f.x, f.y, f.z, f.c]); g.bloodP.userData.set(g.fx.filter(f => f.k === 'b'), f => [f.x, f.y, f.z, f.c]);
+    // ---- falling bodies
+    for (const d of g.dying) {
+      d.t += dt; const k = Math.min(1, d.t / d.fall), e = 1 - (1 - k) * (1 - k), r = d.r;
+      r.position.x += d.vx * dt; r.position.z += d.vz * dt; d.vx *= Math.exp(-5 * dt); d.vz *= Math.exp(-5 * dt);
+      r.rotation.z = e * Math.PI * .49 * (d.fly ? 1.2 : 1); r.rotation.y += (d.yaw - r.rotation.y) * Math.min(1, dt * 14);
+      r.position.y = d.fly ? Math.max(0, Math.sin(Math.min(1, d.t / .55) * Math.PI) * 38) : (d.t > 3.4 ? -(d.t - 3.4) * 14 : 0);
+      R3D.pose(r, d.t * 4, (1 - k) * .9, { pose: 'zombie' });
+      if (d.burn) R3D.tint(r, '#ff7a20', Math.max(0, .8 * (1 - d.t / 1.8))); else R3D.tint(r, '#ff3a2a', 0);
+      if (!d.landed && k >= 1) { d.landed = true; for (let i = 0; i < 6; i++) g.fx.push({ k: 'b', x: r.position.x, y: 2, z: r.position.z, vx: rnd(-50, 50), vz: rnd(-50, 50), vy: rnd(20, 60), l: .5, c: '#8a8070' }); if (d.big) g.kickY = (g.kickY || 0) + 7; }
+    }
+    for (const d of g.dying) if (d.t > 5) { g.ents.remove(d.r); d.r.userData.mats.forEach(x => x.dispose()); d.gone = true; }
+    g.dying = g.dying.filter(d => !d.gone);
+    g.kickX *= Math.exp(-14 * dt); g.kickZ *= Math.exp(-14 * dt); g.kickY = (g.kickY || 0) * Math.exp(-9 * dt);
+    // ---- footprints: stepping in blood leaves a few prints
+    if (!g.pl) g.pl = { x: p.x, y: p.y, steps: 0, side: 1, type: 'z' };
+    const d = Math.hypot(p.x - g.pl.x, p.y - g.pl.y);
+    if (d > 15) {
+      const ang = Math.atan2(p.y - g.pl.y, p.x - g.pl.x), pool = g.pools.find(q => Math.hypot(q.x - p.x, q.y - p.y) < q.r + 6);
+      if (pool) { g.pl.steps = 7; g.pl.type = pool.t; }
+      if (g.pl.steps > 0 && m.fctx) { const q = m.fctx; q.save(); q.translate(p.x, p.y); q.rotate(ang); q.fillStyle = g.pl.type === 'z' ? `rgba(60,90,15,${.12 + g.pl.steps * .07})` : `rgba(130,15,15,${.12 + g.pl.steps * .07})`; q.beginPath(); q.ellipse(-4, g.pl.side * 4.5, 5, 2.4, 0, 0, 7); q.fill(); q.restore(); m.floorDirty = true; g.pl.steps--; }
+      g.pl.side = -g.pl.side; g.pl.x = p.x; g.pl.y = p.y;
+    }
+  };
+  // a zombie or survivor just died: keep the model, let it fall; returns true so sync() does not delete it
+  M.onDeath = (m, g, o, r, type) => {
+    const away = Math.atan2(o.y - m.p.y, o.x - m.p.x), heavy = o.kind === 'brute' || o.kind === 'mutant', blast = m.blasts.find(b => Math.hypot(b.x - o.x, b.y - o.y) < b.r + 25), shot = m.wR.pellets > 1;
+    const push = blast ? 300 : shot ? 150 : 70, a = blast ? Math.atan2(o.y - blast.y, o.x - blast.x) : away;
+    g.dying.push({ r, t: 0, fall: heavy ? .7 : blast ? .75 : .45, vx: Math.cos(a) * push, vz: Math.sin(a) * push, fly: !!blast && !heavy, burn: o.burnT > 0, big: heavy, yaw: -(a + Math.PI) });
+    if (g.dying.length > 16) { const old = g.dying.shift(); g.ents.remove(old.r); old.r.userData.mats.forEach(x => x.dispose()); }
+    M.blood(g, o.x, 14, o.y, Math.cos(a), Math.sin(a), blast ? 22 : 14, type, blast ? 260 : 150); g.pools.push({ x: o.x, y: o.y, r: heavy ? 30 : 22, t: type }); if (g.pools.length > 40) g.pools.shift();
+    return true;
   };
 
   // quality: shadow map size, which small lights stay in the scene (each light costs every pixel, so LOW drops them)
@@ -440,11 +533,14 @@ R3D.mission = (() => {
       r.position.set(z.x, 0, z.y); faceTo(r, z.a || 0);
       R3D.pose(r, z.walk + z.wob, Math.min(1, sp / 45), { chase: z.state === 'chase' });
       const burn = z.burnT > 0, hit = z.hit > 0; R3D.tint(r, burn ? '#ff7a20' : '#ff3a2a', burn ? .8 : hit ? .9 : 0);
-    });
+      if (z.hit > .08 && !u.hitPrev) { const dx = z.x - m.p.x, dy = z.y - m.p.y, l = Math.hypot(dx, dy) || 1; M.blood(g, z.x, 22, z.y, dx / l, dy / l, m.wR.pellets > 1 ? 14 : 7, 'z', 150); if (Math.random() < .5) g.pools.push({ x: z.x, y: z.y, r: 9, t: 'z' }); if (g.pools.length > 40) g.pools.shift(); }
+      u.hitPrev = z.hit > .08;
+    }, (z, r) => M.onDeath(m, g, z, r, 'z'));
     sync(g.hs, m.humans, humanMesh, (r, h) => {
       r.position.set(h.x, 0, h.y); faceTo(r, h.a || 0);
       R3D.pose(r, h.walk || 0, h.moving ? 1 : 0, {}); R3D.tint(r, '#ffcf60', h.flash > 0 ? .9 : 0);
-    });
+      const u = r.userData; if (u.hpPrev !== undefined && h.hp < u.hpPrev - .01) { const dx = h.x - m.p.x, dy = h.y - m.p.y, l = Math.hypot(dx, dy) || 1; M.blood(g, h.x, 22, h.y, dx / l, dy / l, 8, 'h', 150); } u.hpPrev = h.hp;
+    }, (h, r) => M.onDeath(m, g, h, r, 'h'));
     if (m.npc && m.npc.state !== 'dead') {
       if (!g.npc) { g.npc = npcMesh(); g.ents.add(g.npc); }
       const n = m.npc; g.npc.position.set(n.x, 0, n.y); faceTo(g.npc, n.a || 0); R3D.pose(g.npc, n.walk || 0, n.moving ? 1 : 0, {});
@@ -457,7 +553,7 @@ R3D.mission = (() => {
     R3D.pose(pl, p.walk || 0, p.moving ? 1 : 0, { crouch: m.sneak, swing: m.swing ? 1 - m.swing.t / .2 : undefined });
     R3D.tint(pl, '#ff3030', m.hurtT > 0 ? .8 : 0);
     // projectiles and effects
-    g.bullets.begin(); for (const b of m.bullets) { const o = g.bullets.next(); o.position.set(b.x, 22, b.y); o.rotation.y = -Math.atan2(b.vy, b.vx); } g.bullets.end();
+    g.bullets.begin(); for (const b of m.bullets) { const o = g.bullets.next(); const ba = Math.atan2(b.vy, b.vx); o.position.set(b.x - Math.cos(ba) * 9, 22, b.y - Math.sin(ba) * 9); o.rotation.y = -ba; } g.bullets.end();
     g.ebullets.begin(); for (const b of m.ebullets) { const o = g.ebullets.next(); o.position.set(b.x, 22, b.y); o.rotation.y = -Math.atan2(b.vy, b.vx); } g.ebullets.end();
     g.spits.begin(); for (const s of m.spits) g.spits.next().position.set(s.x, 20, s.y); g.spits.end();
     g.acid.begin(); for (const a of m.acid) { const o = g.acid.next(); o.position.set(a.x, 1.2, a.y); o.scale.set(a.r, a.r, 1); o.material.opacity = Math.min(.6, a.l / 1.2 * .6); } g.acid.end();
@@ -512,6 +608,7 @@ R3D.mission = (() => {
     }
     // street lamps: lit at night, the two nearest also light the ground
     if (g.lampMat) { g.lampMat.emissiveIntensity = night ? 1.6 : 0; const near = g.lamps.slice().sort((a, b) => Math.hypot(a.x - p.x, a.z - p.y) - Math.hypot(b.x - p.x, b.z - p.y)); g.lampL.forEach((L, i) => { const q = near[i]; if (q && night) { L.position.set(q.x, 60, q.z); L.intensity = 3.2; } else L.intensity = 0; }); }
+    M.combatFx(m, g, dt || .016, t);
     // lighting follows the player
     g.glow.position.set(p.x, 34, p.y);
     g.torch.position.set(p.x, 36, p.y); g.torch.target.position.set(p.x + Math.cos(p.a || 0) * 220, 0, p.y + Math.sin(p.a || 0) * 220); g.torch.target.updateMatrixWorld();
@@ -522,7 +619,7 @@ R3D.mission = (() => {
     const k = 1 - Math.pow(.0005, dt || .016);
     g.tx += (Math.max(260, Math.min(SW - 260, p.x)) - g.tx) * k; g.tz += (Math.max(190, Math.min(SH - 170, p.y)) - g.tz) * k;
     const sh = m.shake > 0 && SET.shake ? m.shake * 10 * SET.shake : 0, cam = g.camera;
-    cam.position.set(g.tx + (sh ? (Math.random() - .5) * sh : 0), Math.sin(g.pitch) * g.dist + (sh ? (Math.random() - .5) * sh : 0), g.tz + Math.cos(g.pitch) * g.dist);
+    cam.position.set(g.tx + g.kickX + (sh ? (Math.random() - .5) * sh : 0), Math.sin(g.pitch) * g.dist + (sh ? (Math.random() - .5) * sh : 0) + (g.kickY || 0) * (SET.shake || 0), g.tz + g.kickZ + Math.cos(g.pitch) * g.dist);
     cam.lookAt(g.tx, 0, g.tz);
     R3D.show(true);
     R3D.render(g.scene, cam);

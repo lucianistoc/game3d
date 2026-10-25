@@ -421,7 +421,7 @@ R3D.base = (() => {
     return [Math.floor(G.x), Math.floor(G.z)];
   };
   B.pickZombie = raid => {   // nearest attacker to the cursor on screen
-    if (!g) return null; let best = null, bd = 48;
+    if (!g) return null; const strong = typeof SET !== 'undefined' && SET.assist === 'strong'; let best = null, bd = TOUCH.on && SET.assist !== 'off' ? (strong ? 400 : 110) : 48;   // touch assist: a fat finger still hits the nearest attacker
     for (const z of raid.zombies) { const q = R3D.toUI(z.x, .65, z.y, g.camera); if (!q) continue; const d = Math.hypot(q.x - mouse.x, q.y - mouse.y); if (d < bd) { bd = d; best = z; } }
     return best;
   };

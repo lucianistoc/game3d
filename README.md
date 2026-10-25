@@ -33,6 +33,8 @@ Day one: open the **Map**, click a nearby settlement, **Drive** or **Walk** ther
 | **X** | leave the site | |
 | **Esc**, **M** | | menu, mute |
 
+**Touch assist:** Settings > Touch assist (default LIGHT). LIGHT snaps your aim to a visible enemy near your finger, turns HIT towards the nearest enemy, and makes you face the way you walk; on the night watch a tap picks the nearest attacker from further away. STRONG widens the snap and fires at the nearest visible enemy for you when no aim finger is down (it spends ammo and makes noise). OFF is the plain controls. It only applies to touch input. For a gentler game overall choose the EASY difficulty when you start a new game.
+
 **Frame rate:** Settings > FPS (or **F3**, or `?fps` in the address) shows frames per second, the frame time, the worst recent frame and the graphics level in the bottom-right corner.
 
 **Full screen:** the **FULLSCREEN** button on the title screen, the menu and Settings (or **Alt + Enter**) switches full screen on and off; on Android it also locks the screen to landscape. iPhone Safari has no full-screen mode for web pages, so there the button explains the way round: Share > Add to Home Screen, then start the game from its icon (the page ships a manifest and icons, so it opens without browser bars).

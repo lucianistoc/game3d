@@ -145,7 +145,9 @@ const settingsScene = {
       text(KB_LABEL[a], x, y + 20, 13, '#cfe'); button(cap ? 'press a key…' : keyName(SET.kb[a]), x + 190, y, 160, 30, () => { this.capture = a; });
     });
     button('RESET KEYS', 60, 540, 150, 34, () => { SET.kb = { ...KB_DEFAULT }; saveSettings(); }); fsButton(230, 540, 190, 34);
-    text('Touch: the mission arena shows a stick and buttons on touch screens.', 240, 562, 10, '#5fa478');
+    button(`TOUCH ASSIST: ${SET.assist.toUpperCase()}`, 440, 540, 230, 34, () => { SET.assist = SET.assist === 'light' ? 'strong' : SET.assist === 'strong' ? 'off' : 'light'; saveSettings(); });
+    text('LIGHT snaps your aim to enemies and turns HIT towards them. STRONG also fires for you.', 440, 588, 10, '#5fa478');
+    text('Touch: the mission arena shows a stick and buttons on touch screens.', 60, 604, 10, '#5fa478');
     button('◂ BACK', W - 200, H - 70, 160, 40, () => go(this.prev || titleScene));
   },
 };

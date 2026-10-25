@@ -123,6 +123,19 @@ function missionScene(town, mode = 'drive', opts = {}) {
       aim = p;
     }
     if (aim) { mouse.x = aim.x; mouse.y = aim.y; mouse.cx = (aim.x + UI.ox) * UI.scale; mouse.cy = (aim.y + UI.oy) * UI.scale; mouse.down = true; mouse.btn = 0; } else mouse.down = false;
+    TOUCH.aimOn = !!aim;
+  };
+  // Touch assist (Settings): a thumb is far less precise than a mouse and the arena is small on a phone.
+  //   LIGHT: your aim snaps to a visible enemy near your finger, the HIT button turns you towards the nearest enemy, and you face the way you walk.
+  //   STRONG: also a wider snap, and with no aim finger down you fire at the nearest visible enemy by yourself.
+  m.touchAssist = () => {
+    const strong = SET.assist === 'strong', p = m.p, foes = [...m.zombies.filter(z => !z.dead && !(z.state === 'idle' && Math.hypot(z.x - p.x, z.y - p.y) > 200)), ...m.humans.filter(h => !h.dead)];
+    const near = (x, y, R, los) => { let best = null, bd = R; for (const f of foes) { const d = Math.hypot(f.x - x, f.y - y) - (f.r || 10); if (d < bd && (!los || m.los(p.x, p.y, f.x, f.y))) { bd = d; best = f; } } return best; };
+    if (TOUCH.act.melee) { const t = near(p.x, p.y, 70, false); if (t) { mouse.x = t.x; mouse.y = t.y; return; } }
+    if (TOUCH.aimOn) { const t = near(mouse.x, mouse.y, strong ? 150 : 85, true); if (t) { mouse.x = t.x; mouse.y = t.y; } return; }
+    const t = strong ? near(p.x, p.y, 260, true) : null;
+    if (t) { mouse.x = t.x; mouse.y = t.y; mouse.down = true; mouse.btn = 0; return; }
+    const sv = TOUCH.stick; if (sv && (sv.x || sv.y)) { let dx = sv.x, dy = sv.y; if (R3D.ok && m.gl && m.gl.yaw) { const c = Math.cos(m.gl.yaw), s = Math.sin(m.gl.yaw), nx = dx * c + dy * s; dy = -dx * s + dy * c; dx = nx; } mouse.x = p.x + dx * 120; mouse.y = p.y + dy * 120; }   // face the way you walk
   };
   m.drawTouch = () => {
     if (!TOUCH.on) return; ctx.globalAlpha = .5;
@@ -138,6 +151,7 @@ function missionScene(town, mode = 'drive', opts = {}) {
     m.time -= dt; m.fullT -= dt; m.flashT -= dt; m.hurtT -= dt; m.dryT -= dt; m.hordeT -= dt; m.hordeCD -= dt;
     if (TOUCH.on) m.touchUpdate();
     if (R3D.ok) { R3D.mission.aim(m); if (TOUCH.act.zoomin) m.wheel(1.03); if (TOUCH.act.zoomout) m.wheel(1 / 1.03); if (m.gl) { const rl = keys.BracketLeft || TOUCH.act.rotl, rr = keys.BracketRight || TOUCH.act.rotr; if (rl && !m.rotH) m.gl.yawT -= Math.PI / 2; if (rr && !m.rotH) m.gl.yawT += Math.PI / 2; m.rotH = !!(rl || rr); } }   // 3D: turn the cursor into a point on the stage; touch zoom buttons
+    if (TOUCH.on && SET.assist !== 'off') m.touchAssist();
     if (kdown('leave')) { keys[SET.kb.leave] = false; TOUCH.act.leave = false; m.finish(true); return; }
     // ---- movement (Shift sneaks: slower, but quiet and harder to spot)
     m.sneak = kdown('sneak');

@@ -4,7 +4,7 @@ The 3D version of [Timiș Z](https://github.com/lucianistoc/game). The game logi
 
 A browser game about surviving the zombie apocalypse in Timiș County, Romania. Scavenge towns on a wireframe map of the county, then hold an isometric base modelled on a real house in Cărani against the night. Build outposts, trade and fight with other survivor groups, look after a crew of people who grow, fall in love, fall out and die, and decide how the story ends.
 
-**Play it online:** once GitHub Pages is switched on for the repository (Settings > Pages > Source: GitHub Actions), every push publishes the game at `https://<user>.github.io/game3d/`, which also works on a phone.
+**Play it online:** once GitHub Pages is switched on for the repository (Settings > Pages > Source: GitHub Actions), every push publishes the game at `https://<user>.github.io/game3d/`, which also works on a phone. Add `?debug` to the address to show a small panel with the screen size, pointer events, the graphics state and the last error, which helps when something does not work on a particular phone.
 
 No build step. Three.js r158 is vendored in `vendor/`, so there is nothing to install: open `index.html` in a browser. If the browser has no WebGL (or you open `index.html?2d`), the game falls back to the original 2D drawing.
 

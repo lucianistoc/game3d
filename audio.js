@@ -27,7 +27,7 @@ function audioInit() {
     startMusic();
   } catch { AC = null; }
 }
-addEventListener('pointerdown', audioInit); addEventListener('keydown', audioInit);
+addEventListener('pointerdown', audioInit); addEventListener('keydown', audioInit); addEventListener('touchend', audioInit); addEventListener('click', audioInit);   // iOS only unlocks sound on touchend / click
 function applyVolumes() { if (!AC) return; busMaster.gain.value = muted ? 0 : SET.master; busSfx.gain.value = SET.sfx; busMusic.gain.value = SET.music; }
 addEventListener('keydown', e => { if (e.code === 'KeyM' && !e.repeat) { muted = !muted; applyVolumes(); } });
 

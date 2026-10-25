@@ -12,6 +12,9 @@ const R3D = (() => {
     renderer = new THREE.WebGLRenderer({ canvas: glc, antialias: true, powerPreference: 'high-performance' });
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.debug.onShaderError = () => { R.shaderErr = true; };
+    glc.addEventListener('webglcontextlost', e => { e.preventDefault(); R.lost = true; R.ok = false; R.show(false); });   // iOS drops the GL context when the tab is backgrounded
+    glc.addEventListener('webglcontextrestored', () => { R.lost = false; if (R.pref !== '2d' && !R.auto2d) { R.ok = true; R.dirtyMats = true; } });
     R.ok = true;
   } catch (e) { R.ok = false; if (glc) glc.style.display = 'none'; }
   R.renderer = renderer; R.can = R.ok;   // can: WebGL works at all; ok: the 3D view is in use right now (the 2D setting turns it off)
@@ -34,6 +37,8 @@ const R3D = (() => {
     applyLevel(R.level === 'high' ? 'medium' : 'low'); say(`Graphics: lowered to ${R.level.toUpperCase()} to keep the frame rate up (Settings > Graphics)`);
   };
   R.stepDown = () => stepDown();
+  // 3D cannot work on this device (shader failed, repeated errors): use the flat game and say so
+  R.fail = msg => { if (!R.ok) return; R.ok = false; R.auto2d = true; R.show(false); if (typeof baseScene !== 'undefined') baseScene.fit(); say(`3D view unavailable here, using the flat game (${msg})`); DBG.err = msg; };
   // storm lightning shared by the base and missions: returns a 0..1 flash for this frame and rumbles a moment later
   R.lightning = (dt, active) => {
     if (!active) { R._lg = 0; return 0; }
@@ -56,10 +61,10 @@ const R3D = (() => {
   let sizeKey = '';
   R.resize = () => {
     const dpr = Math.min(devicePixelRatio || 1, R.q.pr), key = innerWidth + 'x' + innerHeight + '@' + dpr;
-    if (key !== sizeKey) { sizeKey = key; renderer.setPixelRatio(dpr); renderer.setSize(innerWidth, innerHeight, false); }
+    if (key !== sizeKey) { sizeKey = key; renderer.setPixelRatio(dpr); renderer.setSize(innerWidth, innerHeight, false); glc.style.width = innerWidth + 'px'; glc.style.height = innerHeight + 'px'; }
   };
   R.show = on => { if (glc) glc.style.visibility = on ? 'visible' : 'hidden'; };
-  R.render = (scene, camera) => { watch(scene); R.resize(); if (R.dirtyMats) { R.dirtyMats = false; scene.traverse(o => { if (o.material) [].concat(o.material).forEach(mt => { mt.needsUpdate = true; }); }); } camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.render(scene, camera); };
+  R.render = (scene, camera) => { watch(scene); R.resize(); if (R.dirtyMats) { R.dirtyMats = false; scene.traverse(o => { if (o.material) [].concat(o.material).forEach(mt => { mt.needsUpdate = true; }); }); } camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.render(scene, camera); if (R.shaderErr) { R.shaderErr = false; R.fail('shader error'); } };
   const _v = new THREE.Vector3();
   // world point -> 2D UI coordinates (the space ctx draws in), or null when it is behind the camera
   R.toUI = (x, y, z, camera) => {

@@ -7,6 +7,7 @@ const UI = { scale: 1, dpr: 1, ox: 0, oy: 0, lw: 960, lh: 640 };
 function applyLayout() {
   const cw = innerWidth, ch = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2), bw = Math.round(cw * dpr), bh = Math.round(ch * dpr);
   if (canvas.width !== bw || canvas.height !== bh) { canvas.width = bw; canvas.height = bh; }
+  if (canvas.style.width !== cw + 'px') canvas.style.width = cw + 'px'; if (canvas.style.height !== ch + 'px') canvas.style.height = ch + 'px';   // exactly the visible area (iOS Safari's 100vh is larger), so taps map 1:1
   const fit = Math.max(.6, Math.min(cw / 960, ch / 640)); UI.dpr = dpr; UI.scale = scene && scene.fixed ? fit : fit * SET.uiScale; UI.lw = cw / UI.scale; UI.lh = ch / UI.scale;
   const gl3 = !!(scene && scene.gl3d && R3D.ok); if (gl3 !== applyLayout.gl) { applyLayout.gl = gl3; R3D.show(gl3); }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -21,12 +22,19 @@ const keys = {};
 const mouse = { x: 480, y: 320, cx: 0, cy: 0, down: false, btn: 0, touch: false };   // x, y: UI (or, in a 3D mission, stage) coordinates; cx, cy: client pixels
 addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space') e.preventDefault(); });
 addEventListener('keyup', e => { keys[e.code] = false; });
-function mpos(e) {
+const DBG = { ptr: '', err: '' };   // shown by ?debug
+function cpos(e) {   // pointer position in window pixels, corrected if the canvas is displayed at a different size than the window
   const r = canvas.getBoundingClientRect();
-  mouse.cx = e.clientX; mouse.cy = e.clientY;
-  mouse.x = (e.clientX - r.left) / UI.scale - UI.ox;
-  mouse.y = (e.clientY - r.top) / UI.scale - UI.oy;
+  return [(e.clientX - r.left) * (innerWidth / (r.width || innerWidth)), (e.clientY - r.top) * (innerHeight / (r.height || innerHeight))];
 }
+function mpos(e) {
+  const [x, y] = cpos(e);
+  mouse.cx = x; mouse.cy = y; DBG.ptr = `${e.pointerType} ${Math.round(e.clientX)},${Math.round(e.clientY)} btn ${e.button}`;
+  mouse.x = x / UI.scale - UI.ox;
+  mouse.y = y / UI.scale - UI.oy;
+}
+// iOS: stop the page from scrolling, bouncing or pinch-zooming under the game
+addEventListener('touchmove', e => e.preventDefault(), { passive: false }); addEventListener('gesturestart', e => e.preventDefault());
 let btns = [];
 canvas.addEventListener('pointermove', mpos);
 canvas.addEventListener('pointerdown', e => {
@@ -40,7 +48,7 @@ canvas.addEventListener('pointerdown', e => {
 });
 // touch screens: every finger is tracked so the mission can use a stick and fire at the same time
 const touchPts = new Map();
-const tpos = e => { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / UI.scale - UI.ox, y: (e.clientY - r.top) / UI.scale - UI.oy }; };
+const tpos = e => { const [x, y] = cpos(e); return { x: x / UI.scale - UI.ox, y: y / UI.scale - UI.oy }; };
 canvas.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') { const p = tpos(e); touchPts.set(e.pointerId, { ...p, sx: p.x, sy: p.y }); } }, true);
 canvas.addEventListener('pointermove', e => { const t = touchPts.get(e.pointerId); if (t) Object.assign(t, tpos(e)); });
 addEventListener('pointercancel', e => touchPts.delete(e.pointerId));

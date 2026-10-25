@@ -1,8 +1,10 @@
 // Bootstrap and the main loop. Loaded last, once every scene exists.
 initTextures(); initSiteTextures();
 go(titleScene);
-let last = performance.now(), clock = 0;
-function loop(now) {
+let last = performance.now(), clock = 0, frameErrs = 0;
+const debugOn = /[?&]debug\b/.test(location.search);
+addEventListener('error', e => { DBG.err = String(e.message || e); });
+function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; clock += dt;
   btns = [];
   applyLayout();
@@ -11,7 +13,20 @@ function loop(now) {
   scene.draw(dt, clock);
   drawNotice(dt);
   if (TOUCH.on && scene && scene.fixed && scene.update && innerHeight > innerWidth * 1.1) { ctx.fillStyle = 'rgba(3,8,6,.8)'; ctx.fillRect(-UI.ox, -UI.oy, UI.lw, UI.lh); text('Turn your phone sideways to play', W / 2, H / 2, 20, AMBER, 'center'); }
+  if (debugOn) {   // ?debug: what the phone reports, for diagnosing input and graphics problems
+    const r = canvas.getBoundingClientRect(), L = [`${innerWidth}x${innerHeight} dpr ${devicePixelRatio} canvas ${Math.round(r.width)}x${Math.round(r.height)} ui ${UI.scale.toFixed(2)}`, `3D can ${R3D.can} ok ${R3D.ok} pref ${R3D.pref} level ${R3D.level} lost ${!!R3D.lost}`, `last pointer: ${DBG.ptr}  buttons ${btns.length}  touch ${TOUCH.on}`, `error: ${DBG.err || 'none'}`];
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(0, 0, canvas.width, 4 + L.length * 15 * devicePixelRatio); ctx.font = `${11 * devicePixelRatio}px monospace`; ctx.fillStyle = '#9f9'; ctx.textAlign = 'left'; ctx.shadowBlur = 0;
+    L.forEach((s, i) => ctx.fillText(s, 4, (14 + i * 15) * devicePixelRatio)); ctx.restore();
+  }
+}
+// the next frame is scheduled first, so one failing frame can never freeze the game; two failures in 3D switch to the flat game
+function loop(now) {
   requestAnimationFrame(loop);
+  try { frame(now); frameErrs = Math.max(0, frameErrs - .02); }
+  catch (e) {
+    DBG.err = String(e && e.message || e); console.error(e); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    if (++frameErrs >= 2 && R3D.ok) { frameErrs = 0; R3D.fail(DBG.err.slice(0, 60)); }
+  }
 }
 requestAnimationFrame(loop);
 setInterval(() => { if (curSlot) persist(); }, 30000);

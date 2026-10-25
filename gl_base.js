@@ -394,7 +394,7 @@ R3D.base = (() => {
   // vehicles parked on the street
   const makeVehicle = v => R3D.vehicle(v.type, v.color || '#2f4a7a', VEHICLE_TYPES[v.type].len * GSCALE, 1.2);
   const ROLE_LOOK = { fighter: { variant: 'soldier', shirt: '#5a6a48', pants: '#3a4a30' }, engineer: { variant: 'hardhat', shirt: '#e8742a', pants: '#2a2e38' }, medic: { variant: 'medic', shirt: '#f2f2f0', pants: '#2a2e38' }, farmer: { variant: 'strawhat', shirt: '#6a8a3a', pants: '#3a4a6a' }, scout: { variant: 'hoodie', shirt: '#3a5a6a', pants: '#2a3a30' }, mechanic: { variant: 'vest', shirt: '#3a4a6a', pants: '#2a2e38' }, cook: { variant: 'chef', shirt: '#f2f2f0', pants: '#2a2a30' } };
-  const crewMesh = c => R3D.humanoid({ skin: ['#caa07a', '#e0b890', '#a8785a', '#8a5a3a'][c.name.length % 4], hat: ['#2a2018', '#5a4030', '#8a7a5a', '#1a1a1a'][c.name.charCodeAt(0) % 4], pants: '#2f3440', ...(ROLE_LOOK[c.role] || {}), scale: 1.15, pose: 'idle' });
+  const crewMesh = c => R3D.humanoid({ skin: ['#caa07a', '#e0b890', '#a8785a', '#8a5a3a'][c.name.length % 4], hat: ['#2a2018', '#5a4030', '#8a7a5a', '#1a1a1a'][c.name.charCodeAt(0) % 4], pants: '#2f3440', ...(ROLE_LOOK[c.role] || {}), gun: 'pistol', scale: 1.15, pose: 'idle' });
   const ZB = { walker: [1.15, 1], runner: [1.1, .95], brute: [1.5, 1.45], spitter: [1.15, 1.05], armored: [1.22, 1.12] };
   const ZSKIN = { walker: '#7d9468', brute: '#8c946a', runner: '#a3ad84', spitter: '#97c93f', armored: '#6f8a6c' };
   const CLOTH = ['#5a5348', '#3f4a56', '#6a4a3a', '#4a5a4a', '#6a6a6a', '#4a3a5a'];
@@ -464,6 +464,101 @@ R3D.base = (() => {
 
   // ---------------------------------------------------------------- one frame
   const sky = { day: new THREE.Color('#8db7dc'), night: new THREE.Color('#04060d'), dusk: new THREE.Color('#e08a5a'), grey: new THREE.Color('#7f8a94'), tmp: new THREE.Color() };
+
+  // ---------------------------------------------------------------- the living base: crew follow a daily routine and walk around the buildings
+  // Morning: out of the house to their jobs; day: each role works where it makes sense (farmers water the greenhouses, the engineer repairs the most
+  // damaged building, fighters guard the gate and fences...); evening: everyone gathers at the gazebo; night: indoors (windows lit). During the night watch
+  // they take the posts the plan gave them: at the house windows, on a turret, repairing or tending the wounded.
+  const PASS = new Set(['garden', 'wire', 'pit', 'mine', 'gate']);
+  const blockedAt = (x, y) => x < 1 || y < 1 || x >= GX - 1 || y >= GY - 1 || (g.nav ? g.nav[y * GX + x] === 1 : false);
+  const refreshNav = () => {
+    let sig = save.buildings.length; for (const b of save.buildings) sig = (sig * 31 + b.gx * 7 + b.gy) | 0;
+    if (g.navSig === sig) return; g.navSig = sig; g.nav = new Uint8Array(GX * GY);
+    for (const b of save.buildings) if (!PASS.has(b.t)) for (let i = 0; i < b.w; i++) for (let j = 0; j < b.h; j++) { const x = b.gx + i, y = b.gy + j; if (x >= 0 && y >= 0 && x < GX && y < GY) g.nav[y * GX + x] = 1; }
+  };
+  const freeNear = (x, y) => {   // the closest open cell to a point
+    const cx = Math.floor(x), cy = Math.floor(y);
+    for (let r = 0; r <= 5; r++) for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) if (Math.max(Math.abs(dx), Math.abs(dy)) === r && !blockedAt(cx + dx, cy + dy)) return [cx + dx, cy + dy];
+    return [Math.max(1, Math.min(GX - 2, cx)), Math.max(1, Math.min(GY - 2, cy))];
+  };
+  const aStar = (sx, sy, tx, ty) => {
+    const N = GX * GY, idx = (x, y) => y * GX + x, gS = new Float32Array(N).fill(1e9), from = new Int16Array(N).fill(-1), closed = new Uint8Array(N), open = [idx(sx, sy)]; gS[open[0]] = 0;
+    const h = (x, y) => { const dx = Math.abs(x - tx), dy = Math.abs(y - ty); return Math.max(dx, dy) + .414 * Math.min(dx, dy); };
+    let it = 0, found = sx === tx && sy === ty;
+    while (open.length && it++ < 900 && !found) {
+      let bi = 0, bf = 1e9; for (let i = 0; i < open.length; i++) { const k = open[i], f = gS[k] + h(k % GX, (k / GX) | 0); if (f < bf) { bf = f; bi = i; } }
+      const cur = open.splice(bi, 1)[0]; if (closed[cur]) continue; closed[cur] = 1; const cx = cur % GX, cy = (cur / GX) | 0; if (cx === tx && cy === ty) { found = true; break; }
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        if (!dx && !dy) continue; const nx = cx + dx, ny = cy + dy; if (blockedAt(nx, ny) || (dx && dy && (blockedAt(cx + dx, cy) || blockedAt(cx, cy + dy)))) continue;
+        const k = idx(nx, ny), ng = gS[cur] + (dx && dy ? 1.414 : 1); if (ng < gS[k]) { gS[k] = ng; from[k] = cur; open.push(k); }
+      }
+    }
+    if (!found) return null; const path = []; for (let k = idx(tx, ty); k >= 0 && k !== idx(sx, sy); k = from[k]) path.push([k % GX + .5, ((k / GX) | 0) + .5]); return path.reverse();
+  };
+  const hrOf = c => ((c % 24) + 24) % 24, hsh = (s, k = 0) => { let h = 2166136261 + k; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return ((h >>> 0) % 1000) / 1000; };
+  const planFor = (c, i, br, raid) => {
+    const house = save.buildings.find(b => b.t === 'house'); if (!house) return { key: 'none', goal: [9, 18], anim: 'idle' };
+    const door = [house.gx + 2.5, house.gy + house.h + .6], bs = t => save.buildings.filter(b => b.t === t), south = (b, k = .5) => [b.gx + b.w * k, b.gy + b.h + .5], hr = hrOf(save.clock), sub = br.sub;
+    const inside = { key: 'inside', goal: door, anim: 'enter', hidden: true }, post = raid && !raid.result ? save.posts[c.name] : null;
+    if (raid && !raid.result) {   // the night watch
+      if (post === 'windows') { const k = Math.floor(i / 2) % 4, side = i % 2; return { key: 'win' + i, goal: [house.gx + (side ? -.8 : house.w + .8), house.gy + (k + .5) * house.h / 4], anim: 'shoot' }; }
+      if (post === 'turret') { const tb = [...(raid.manned || new Map()).entries()].find(([, who]) => who === c); if (tb) { const b = tb[0]; return { key: 'tur' + b.gx + b.gy, goal: [b.gx + .5 + Math.sign(house.gx + 2 - b.gx - .5) * 1.1, b.gy + .5 + Math.sign(house.gy + 4 - b.gy - .5) * .3], anim: 'shoot' }; } }
+      if (post === 'repair') { let w = null, wr = 1; for (const b of save.buildings) if (b.t !== 'house' && !TRAP_KINDS.has(b.t) && b.hp < maxHp(b) && b.hp / maxHp(b) < wr) { wr = b.hp / maxHp(b); w = b; } if (w) return { key: 'rep' + w.gx + w.gy, goal: [w.gx + w.w / 2, w.gy + w.h + .8], look: [w.gx + w.w / 2, w.gy + w.h / 2], anim: 'hammer' }; }
+      if (post === 'medic') return { key: 'med', goal: [house.gx + house.w + 1, house.gy + house.h - 1.5], anim: 'look' };
+      return inside;
+    }
+    if (hr >= 22 || hr < 5.5) return inside;
+    if (hr >= 20.5) return inside;
+    if (hr >= 17.5) { const gz = bs('gazebo')[0]; if (gz) { const a = (i / Math.max(1, alive().length)) * Math.PI * 2; return { key: 'gather', goal: [gz.gx + gz.w / 2 + Math.cos(a) * 1.7, gz.gy + gz.h / 2 + Math.sin(a) * 1.7], look: [gz.gx + gz.w / 2, gz.gy + gz.h / 2], anim: 'talk' }; } }
+    const pick = list => list[Math.floor(hsh(c.name, sub) * list.length) % list.length];
+    switch (c.role) {
+      case 'fighter': { const t = bs('turret'); return pick([{ key: 'g1', goal: [7.5, GY - 2.4], look: [7.5, GY + 4], anim: 'guard' }, { key: 'g2', goal: [GX / 2, 1.7], look: [GX / 2, -6], anim: 'guard' }, { key: 'g3', goal: [GX - 2.5, GY / 2], look: [GX + 6, GY / 2], anim: 'guard' }, t[0] ? { key: 'g4', goal: [t[0].gx + 1.5, t[0].gy + .5], look: [t[0].gx + 8, t[0].gy], anim: 'guard' } : { key: 'g5', goal: [3, GY - 3], look: [3, GY + 4], anim: 'guard' }]); }
+      case 'engineer': { let w = null, wr = 1; for (const b of save.buildings) if (b.t !== 'house' && !TRAP_KINDS.has(b.t) && b.hp / maxHp(b) < wr) { wr = b.hp / maxHp(b); w = b; } if (w && wr < .95) return { key: 'e' + w.gx + w.gy, goal: [w.gx + w.w / 2, w.gy + w.h + .8], look: [w.gx + w.w / 2, w.gy + w.h / 2], anim: 'hammer' }; const ws = bs('workshop')[0]; return ws ? { key: 'ew', goal: south(ws, .3), look: [ws.gx + 1, ws.gy + ws.h], anim: 'hammer' } : { key: 'ei', goal: [9, 18], anim: 'idle' }; }
+      case 'medic': return pick([{ key: 'm1', goal: [house.gx + house.w + 1, house.gy + house.h - 1.5], anim: 'look' }, { key: 'm2', goal: [door[0] + 2, door[1]], anim: 'talk' }]);
+      case 'farmer': { const gh = bs('greenhouse'), gd = bs('garden'); const opts = [...gh.map(b => ({ key: 'f' + b.gx + b.gy, goal: south(b, .5 + hsh(c.name) * .1), look: [b.gx + b.w / 2, b.gy + b.h / 2], anim: 'water' })), ...gd.slice(0, 3).map(b => ({ key: 'fg' + b.gx + b.gy, goal: [b.gx + .5, b.gy + 1.4], look: [b.gx + .5, b.gy + .5], anim: 'water' }))]; return opts.length ? pick(opts) : { key: 'fi', goal: [10, 14], anim: 'look' }; }
+      case 'scout': return pick([{ key: 's1', goal: [7.5, GY - 2.4], look: [8, GY + 8], anim: 'look' }, { key: 's2', goal: [GX / 2, 1.7], look: [GX / 2, -8], anim: 'look' }, { key: 's3', goal: [GX - 2.5, 5], look: [GX + 8, 5], anim: 'look' }]);
+      case 'mechanic': { const gen = bs('generator')[0], pb = bs('powerbox')[0]; return pick([gen ? { key: 'mg', goal: [gen.gx + 1.5, gen.gy + .5], look: [gen.gx + .5, gen.gy + .5], anim: 'hammer' } : { key: 'mi', goal: [3, 20], anim: 'idle' }, pb ? { key: 'mp', goal: [pb.gx + 1.5, pb.gy + .5], look: [pb.gx + .5, pb.gy + .5], anim: 'hammer' } : { key: 'mj', goal: [3, 21], anim: 'idle' }]); }
+      case 'cook': { const gz = bs('gazebo')[0]; return pick([gz ? { key: 'c1', goal: [gz.gx + gz.w / 2, gz.gy + gz.h + .9], look: [gz.gx + gz.w / 2, gz.gy + gz.h / 2], anim: 'water' } : { key: 'c0', goal: door, anim: 'idle' }, { key: 'c2', goal: [door[0] + 1.5, door[1] + .5], anim: 'look' }]); }
+      default: return { key: 'w' + sub, goal: [4 + hsh(c.name, sub) * 12, 12 + hsh(c.name, sub + 5) * 12], anim: 'idle' };
+    }
+  };
+  B.life = (sc, dt, crew, raid) => {
+    refreshNav(); const house = save.buildings.find(b => b.t === 'house'); if (!g.brains) g.brains = new Map();
+    for (const [c, br] of g.brains) if (!crew.includes(c)) g.brains.delete(c);
+    crew.forEach((c, i) => {
+      let m = g.crew.get(c); if (!m) { m = crewMesh(c); g.crew.set(c, m); g.ents.add(m); }
+      let br = g.brains.get(c); if (!br) { br = { x: 9, y: 19, path: [], ph: Math.random() * 6, face: 0, sub: 0, t: 8 + Math.random() * 14, key: '', hidden: false, plan: null, wait: 0 }; g.brains.set(c, br); }
+      br.t -= dt; if (br.t <= 0) { br.t = 14 + hsh(c.name, br.sub) * 22; br.sub++; }
+      const plan = planFor(c, i, br, raid), fresh = br.key === '';
+      if (plan.key !== br.key) {
+        br.key = plan.key; br.plan = plan; const [gx, gy] = freeNear(plan.goal[0], plan.goal[1]); br.goal = [gx + .5, gy + .5];
+        if (fresh) { br.x = br.goal[0]; br.y = br.goal[1]; br.path = []; br.hidden = !!plan.hidden; if (plan.hidden && house) { br.x = house.gx + 2.5; br.y = house.gy + house.h + .6; } }
+        else { if (br.hidden && !plan.hidden && house) { br.x = house.gx + 2.5; br.y = house.gy + house.h + .6; br.hidden = false; } const [sx, sy] = freeNear(br.x, br.y); br.path = aStar(sx, sy, gx, gy) || [br.goal]; }
+      }
+      // walk along the path
+      const run = raid && !raid.result ? 3 : 1.5; let moving = false;
+      if (br.path.length) { const [tx, ty] = br.path[0], dx = tx - br.x, dy = ty - br.y, d = Math.hypot(dx, dy), step = run * dt; moving = true; if (d <= step) { br.x = tx; br.y = ty; br.path.shift(); } else { br.x += dx / d * step; br.y += dy / d * step; } br.fx = dx; br.fy = dy; br.ph += dt * run * .5; }
+      else if (plan.hidden && !br.hidden) br.hidden = true;
+      m.visible = !br.hidden; if (br.hidden) return;
+      // facing: the way it walks, or at what it is doing
+      let ax = br.fx, ay = br.fy;
+      if (!moving) { if (plan.anim === 'shoot' && raid) { let nz = null, nd = 99; for (const z of raid.zombies) { const d = Math.hypot(z.x - br.x, z.y - br.y); if (d < nd) { nd = d; nz = z; } } if (nz) { ax = nz.x - br.x; ay = nz.y - br.y; } else if (house) { ax = br.x - (house.gx + house.w / 2); ay = br.y - (house.gy + house.h / 2); } } else if (plan.look) { ax = plan.look[0] - br.x; ay = plan.look[1] - br.y; } }
+      if (ax !== undefined && (ax || ay)) { const want = -Math.atan2(ay, ax); let dy2 = want - br.face; dy2 = Math.atan2(Math.sin(dy2), Math.cos(dy2)); br.face += dy2 * Math.min(1, dt * 8); }
+      m.position.set(br.x, 0, br.y); m.rotation.y = br.face;
+      const u = m.userData, an = moving ? 'walk' : plan.anim, tt = g.t + i * 1.7;
+      u.gun.visible = an === 'shoot' || an === 'guard';
+      R3D.pose(m, br.ph, moving ? 1 : 0, an === 'shoot' || an === 'guard' ? { pose: 'aim' } : {});
+      if (!moving) {
+        if (an === 'hammer') { const s = Math.sin(tt * 8); u.armR.rotation.z = .5 + s * .8; u.elbowR.rotation.z = .7 + s * .4; u.upper.rotation.z = -.18; if (s > .97 && Math.random() < .5 && plan.look) { const b = 1.1; g.fx.push({ x: br.x + Math.cos(-br.face) * .5, y: .9, z: br.y + Math.sin(-br.face) * .5, vx: (Math.random() - .5) * 3, vy: 1.5 + Math.random() * 2, vz: (Math.random() - .5) * 3, l: .35, c: '#ffd070' }); } }
+        else if (an === 'water') { u.armL.rotation.z = 1; u.armR.rotation.z = 1.1; u.elbowL.rotation.z = .5; u.elbowR.rotation.z = .5; u.upper.rotation.z = -.22 + Math.sin(tt * 1.5) * .05; u.head.rotation.z = .25; }
+        else if (an === 'look' || an === 'guard') { u.head.rotation.y = Math.sin(tt * .7) * 1.0; }
+        else if (an === 'talk') { u.armR.rotation.z = .6 + Math.sin(tt * 2.6) * .6; u.elbowR.rotation.z = .5; u.head.rotation.y = Math.sin(tt * .9) * .5; }
+        else if (an === 'shoot') { u.head.rotation.y = 0; }
+        else u.head.rotation.y = Math.sin(tt * .5) * .4;
+      } else u.head.rotation.y = 0;
+    });
+  };
+
   B.applyQuality = () => {
     g.qv = R3D.qv; const q = R3D.q, sh = g.sun.shadow;
     g.sun.castShadow = q.shadow > 0; if (q.shadow && sh.mapSize.x !== q.shadow) { sh.mapSize.set(q.shadow, q.shadow); if (sh.map) { sh.map.dispose(); sh.map = null; } }
@@ -504,6 +599,8 @@ R3D.base = (() => {
     if (g.dirty) rebuildBatch();
     // the house burns when it is nearly gone
     const fires = [];
+    for (const b of save.buildings) if (b.t !== 'house' && b.t !== 'garden' && !TRAP_KINDS.has(b.t) && b.hp / maxHp(b) < .3) fires.push([b.gx + b.w / 2, (HT[b.t] ? HT[b.t][0] : 1) + .3, b.gy + b.h / 2, .7]);   // badly damaged buildings burn
+    g.smokeT = (g.smokeT || 0) - dt; const hs = save.buildings.find(b => b.t === 'house'); if (hs && g.smokeT <= 0 && !(raid && raid.result)) { g.smokeT = .45; g.fx.push({ x: hs.gx + hs.w * .6 + .22, y: 3.3, z: hs.gy + hs.h * .25 + .22, vx: .25 + Math.random() * .2, vy: .7, vz: .1, l: 2.4, c: '#8a8a88', smoke: 1 }); }   // chimney smoke
     if (save.houseHp < 30) { const h = save.buildings.find(b => b.t === 'house'); if (h) fires.push([h.gx + 1, 2.4, h.gy + 3, 1.3], [h.gx + 3, 2.2, h.gy + 6, 1.1]); }
     // vehicles
     const vl = save.vehicles.slice(0, FLEET_MAX);
@@ -512,11 +609,7 @@ R3D.base = (() => {
     // the crew, standing about in the yard
     const crew = alive();
     for (const [c, m] of g.crew) if (!crew.includes(c)) { g.ents.remove(m); g.crew.delete(c); }
-    crew.forEach((c, i) => {
-      let m = g.crew.get(c); if (!m) { m = crewMesh(c); g.crew.set(c, m); g.ents.add(m); }
-      const gx = 9.2 + (i % 4) * .6, gy = 18.4 + Math.floor(i / 4) * 1.6 + (i % 4) * .7; m.position.set(gx, 0, gy); m.rotation.y = -1.2 + Math.sin(g.t * .5 + i) * .4; R3D.pose(m, g.t * .15 + i, 0, {});
-      m.userData.head.rotation.y = Math.sin(g.t * .7 + i * 2) * .5;
-    });
+    B.life(sc, dt, crew, raid);
 
     // the raid
     const sync = (map, list, make, upd, onGone) => {
@@ -553,7 +646,7 @@ R3D.base = (() => {
     if (raid) for (const b2 of raid.blasts) { const pr = Math.min(1, 1 - b2.l / .5), m = g.blasts.next(); m.position.set(b2.x, .8, b2.y); m.scale.setScalar(1 + pr * 3.4); m.material.opacity = Math.max(0, .85 * (1 - pr)); bl = Math.max(bl, 1 - pr); g.blastL.position.set(b2.x, 3, b2.y); }
     g.blasts.end(); g.blastL.intensity = bl * 28;
     // particles
-    for (const p of g.fx) { p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 9 * dt; p.l -= dt; if (p.y < .05) { p.y = .05; p.vy = 0; p.vx *= .8; p.vz *= .8; } }
+    for (const p of g.fx) { p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; if (!p.smoke) p.vy -= 9 * dt; p.l -= dt; if (!p.smoke && p.y < .05) { p.y = .05; p.vy = 0; p.vx *= .8; p.vz *= .8; } }
     g.fx = g.fx.filter(p => p.l > 0); g.parts.userData.set(g.fx, p => [p.x, p.y, p.z, p.c]);
 
     // hover: the ghost of what a click would place, and highlighted cells for upgrade / repair / sell

@@ -73,6 +73,7 @@ Each day runs from 06:00 to dusk at 20:00. A scavenging run costs hours (the dri
 - **Power:** 16 kWp of solar and a 30 kWh battery; weather and season change output; a diesel generator is the backup; EVs with V2L can power the house.
 - **Water and food:** the crew needs about 0.75 food and water each a night. Greenhouses and gardens make food; **tanks** (more when it rains) and a **well** make water. Water is the early pinch: build the well.
 - **Rooms** (the Rooms button): bunk rooms (more beds, up to 14 people), kitchen, clinic, radio room (and mast), and storerooms. **Storage is limited**: surplus above the cap is lost at dawn.
+- **A living base (3D):** the crew walk the plot on their own (A* around buildings): fighters guard, engineers repair the most damaged building, medics sit on the porch, farmers water the greenhouses, cooks work the gazebo. Around 17:30 everyone gathers at the gazebo and talks; at night they go indoors and the windows light up. During a raid they man windows, turret and repairs. Badly damaged buildings smoke and burn.
 - **Crafting** (needs the workshop; takes daylight hours): ammunition, shotgun shells, a suppressor, field dressings, molotovs, pipe bombs, melee weapons and basic gear. **Gear:** backpacks (capacity), clothing (damage reduction), footwear (speed).
 
 ## Crew

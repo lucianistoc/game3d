@@ -8,7 +8,9 @@ function applyLayout() {
   const cw = innerWidth, ch = innerHeight, dpr = Math.min(devicePixelRatio || 1, 2), bw = Math.round(cw * dpr), bh = Math.round(ch * dpr);
   if (canvas.width !== bw || canvas.height !== bh) { canvas.width = bw; canvas.height = bh; }
   if (canvas.style.width !== cw + 'px') canvas.style.width = cw + 'px'; if (canvas.style.height !== ch + 'px') canvas.style.height = ch + 'px';   // exactly the visible area (iOS Safari's 100vh is larger), so taps map 1:1
-  const fit = Math.max(.6, Math.min(cw / 960, ch / 640)); UI.dpr = dpr; UI.scale = scene && scene.fixed ? fit : fit * SET.uiScale; UI.lw = cw / UI.scale; UI.lh = ch / UI.scale;
+  // fixed 960x640 screens (title, menus, the mission arena) must fit entirely, so they may shrink below the .6 floor the flexible screens keep:
+  // a phone held sideways in Safari has only ~330 pt of height
+  const raw = Math.min(cw / 960, ch / 640), fit = scene && scene.fixed ? Math.max(.3, raw) : Math.max(.6, raw); UI.dpr = dpr; UI.scale = scene && scene.fixed ? fit : fit * SET.uiScale; UI.lw = cw / UI.scale; UI.lh = ch / UI.scale;
   const gl3 = !!(scene && scene.gl3d && R3D.ok); if (gl3 !== applyLayout.gl) { applyLayout.gl = gl3; R3D.show(gl3); }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (gl3) ctx.clearRect(0, 0, canvas.width, canvas.height); else { ctx.fillStyle = '#030806'; ctx.fillRect(0, 0, canvas.width, canvas.height); }

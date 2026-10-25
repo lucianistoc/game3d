@@ -110,12 +110,14 @@ function missionScene(town, mode = 'drive', opts = {}) {
   };
 
   // ---------------------------------------------------------------- touch controls: a stick on the left, buttons on the right, touch anywhere else to aim and fire
-  const TBTN = () => [['melee', W - 80, H - 190, 'HIT'], ['throw', W - 170, H - 190, 'THROW'], ['use', W - 80, H - 110, 'USE'], ['sneak', W - 170, H - 110, 'SNEAK'], ['leave', W - 46, 100, 'LEAVE'], ['zoomin', W - 128, 100, '+'], ['zoomout', W - 210, 100, '−'], ['rotl', W - 210, 158, '⟲'], ['rotr', W - 128, 158, '⟳']];
+  const tbtnScale = () => Math.min(1.25, Math.max(1, .6 / UI.scale));   // small screens shrink the arena, so the touch buttons grow a little to stay easy to hit
+  const tbtnSmall = a => a === 'zoomin' || a === 'zoomout' || a === 'rotl' || a === 'rotr';   // the view buttons are smaller than the combat ones
+  const TBTN = () => [['melee', W - 80, H - 190, 'HIT'], ['throw', W - 170, H - 190, 'THROW'], ['use', W - 80, H - 110, 'USE'], ['sneak', W - 170, H - 110, 'SNEAK'], ['leave', W - 46, 100, 'LEAVE'], ['zoomin', W - 128, 100, '+'], ['zoomout', W - 210, 100, '−'], ['rotl', W - 210, 192, '⟲'], ['rotr', W - 128, 192, '⟳']];
   m.touchUpdate = () => {
     for (const a of ['melee', 'use', 'throw', 'leave', 'zoomin', 'zoomout', 'rotl', 'rotr']) TOUCH.act[a] = false; TOUCH.stick = null; let aim = null;
     for (const p of touchPts.values()) {
       let used = false;
-      for (const [a, bx, by] of TBTN()) if (Math.hypot(p.x - bx, p.y - by) < 38) { used = true; if (a === 'sneak') { if (!p.tog) { p.tog = true; TOUCH.act.sneak = !TOUCH.act.sneak; } } else TOUCH.act[a] = true; }
+      for (const [a, bx, by] of TBTN()) if (Math.hypot(p.x - bx, p.y - by) < (tbtnSmall(a) ? 29 : 38) * tbtnScale()) { used = true; if (a === 'sneak') { if (!p.tog) { p.tog = true; TOUCH.act.sneak = !TOUCH.act.sneak; } } else TOUCH.act[a] = true; }
       if (used) continue;
       if (p.sx < W * .36 && p.sy > H * .4) { const dx = (p.x - p.sx) / 50, dy = (p.y - p.sy) / 50, l = Math.max(1, Math.hypot(dx, dy)); TOUCH.stick = { x: dx / l, y: dy / l }; TOUCH.stickC = p; continue; }
       aim = p;
@@ -126,7 +128,7 @@ function missionScene(town, mode = 'drive', opts = {}) {
     if (!TOUCH.on) return; ctx.globalAlpha = .5;
     const c = TOUCH.stick && TOUCH.stickC ? TOUCH.stickC : { sx: 110, sy: H - 110, x: 110, y: H - 110 };
     ctx.strokeStyle = '#9fb'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.sx, c.sy, 50, 0, 7); ctx.stroke(); ctx.fillStyle = '#9fb'; ctx.beginPath(); ctx.arc(c.sx + Math.max(-50, Math.min(50, c.x - c.sx)), c.sy + Math.max(-50, Math.min(50, c.y - c.sy)), 20, 0, 7); ctx.fill();
-    for (const [a, bx, by, l] of TBTN()) { ctx.strokeStyle = a === 'sneak' && TOUCH.act.sneak ? AMBER : '#9fb'; ctx.beginPath(); ctx.arc(bx, by, 34, 0, 7); ctx.stroke(); text(l, bx, by + 4, 10, '#cfe', 'center'); }
+    for (const [a, bx, by, l] of TBTN()) { ctx.strokeStyle = a === 'sneak' && TOUCH.act.sneak ? AMBER : '#9fb'; ctx.beginPath(); ctx.arc(bx, by, (tbtnSmall(a) ? 25 : 34) * tbtnScale(), 0, 7); ctx.stroke(); text(l, bx, by + 4, 10, '#cfe', 'center'); }
     ctx.globalAlpha = 1;
   };
 

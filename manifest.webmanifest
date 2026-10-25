@@ -1,0 +1,15 @@
+{
+  "name": "Timiș Z 3D",
+  "short_name": "Timiș Z",
+  "description": "A zombie-apocalypse survival game set in Timiș County, Romania.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#030806",
+  "theme_color": "#030806",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

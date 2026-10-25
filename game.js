@@ -56,6 +56,29 @@ addEventListener('pointerup', e => { touchPts.delete(e.pointerId); mouse.down = 
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => { if (scene && scene.wheel) { e.preventDefault(); mpos(e); scene.wheel(e.deltaY < 0 ? 1.25 : 1 / 1.25, mouse.x, mouse.y); } }, { passive: false });
 
+// ---------- full screen
+// Desktop and Android browsers have a fullscreen API; iPhone Safari has none for pages, so there the way is Share > Add to Home Screen
+// (the manifest and meta tags make the installed icon open without browser bars). Browsers only allow the request from a finished
+// touch / click / key, so a button press just sets a flag and the next pointerup / touchend / click / keyup does it.
+const FS = {
+  api: !!(document.fullscreenEnabled || document.webkitFullscreenEnabled), pending: false,
+  standalone: () => !!(navigator.standalone || (typeof matchMedia === 'function' && matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches)),
+  on: () => !!(document.fullscreenElement || document.webkitFullscreenElement),
+  label: () => FS.on() ? 'EXIT FULLSCREEN' : FS.api ? 'FULLSCREEN' : 'FULLSCREEN: HOW?',
+  request() { FS.pending = true; },
+  _do() {
+    FS.pending = false; const d = document, el = d.documentElement;
+    if (!FS.api) { say(FS.standalone() ? 'Already full screen' : 'iPhone: tap Share, then Add to Home Screen, and open the game from its icon'); return; }
+    try {
+      if (FS.on()) (d.exitFullscreen || d.webkitExitFullscreen).call(d);
+      else { const p = (el.requestFullscreen || el.webkitRequestFullscreen).call(el, { navigationUI: 'hide' }); if (p && p.then) p.then(() => { try { screen.orientation.lock('landscape').catch(() => {}); } catch {} }).catch(() => say('The browser refused full screen')); }
+    } catch { say('Full screen is not available here'); }
+  },
+};
+['pointerup', 'touchend', 'click', 'keyup'].forEach(ev => addEventListener(ev, () => { if (FS.pending) FS._do(); }, true));
+addEventListener('keydown', e => { if (e.altKey && e.code === 'Enter') { e.preventDefault(); FS.request(); } });
+function fsButton(x, y, w, h) { if (FS.standalone() && !FS.api) return; button(FS.label(), x, y, w, h, () => FS.request()); }   // hidden once installed to the Home Screen on iPhone
+
 // ---------- helpers ----------
 const GREEN = '#3f6', DIM = '#1c5a30', RED = '#f55', AMBER = '#fc4';
 const rand = (a, b) => a + Math.random() * (b - a);

@@ -71,7 +71,7 @@ const titleScene = {
         button('NEW GAME', x + 530, y + 30, 110, 28, () => { newGameScene.slot = i; go(newGameScene); });
       }
     }
-    button('SETTINGS', W / 2 - 80, 508, 160, 34, () => { settingsScene.prev = titleScene; go(settingsScene); });
+    button('SETTINGS', W / 2 - 175, 508, 160, 34, () => { settingsScene.prev = titleScene; go(settingsScene); }); fsButton(W / 2 + 15, 508, 160, 34);
     const hof = hallOfFame(); if (hof.length) text(`Best: ${hof[0].name} · ${hof[0].score} points (${hof[0].end})`, W / 2, 570, 12, '#fc4', 'center');
     text('M mutes · all progress saves automatically', W / 2, H - 20, 11, DIM, 'center');
   },
@@ -112,7 +112,7 @@ const menuScene = {
     b('RESUME', 210, () => go(this.prev || baseScene));
     b('SETTINGS', 262, () => { settingsScene.prev = menuScene; go(settingsScene); });
     b('HISTORY AND MEMORIAL', 314, () => { historyScene.prev = menuScene; go(historyScene); });
-    b('SAVE AND QUIT TO TITLE', 366, () => { persist(); go(titleScene); });
+    b('SAVE AND QUIT TO TITLE', 366, () => { persist(); go(titleScene); }); fsButton(W / 2 - 120, 418, 240, 42);
     if (keys.Escape) { keys.Escape = false; go(this.prev || baseScene); }
   },
 };
@@ -143,7 +143,7 @@ const settingsScene = {
       const col = i < 5 ? 0 : 1, row = i % 5, x = 60 + col * 440, y = 324 + row * 40, cap = this.capture === a;
       text(KB_LABEL[a], x, y + 20, 13, '#cfe'); button(cap ? 'press a key…' : keyName(SET.kb[a]), x + 190, y, 160, 30, () => { this.capture = a; });
     });
-    button('RESET KEYS', 60, 540, 150, 34, () => { SET.kb = { ...KB_DEFAULT }; saveSettings(); });
+    button('RESET KEYS', 60, 540, 150, 34, () => { SET.kb = { ...KB_DEFAULT }; saveSettings(); }); fsButton(230, 540, 190, 34);
     text('Touch: the mission arena shows a stick and buttons on touch screens.', 240, 562, 10, '#5fa478');
     button('◂ BACK', W - 200, H - 70, 160, 40, () => go(this.prev || titleScene));
   },

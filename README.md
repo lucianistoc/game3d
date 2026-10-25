@@ -111,6 +111,8 @@ Needs the radio room.
 - Vehicles have a **condition**: trips wear them, a battered one is slower and breaks down. Repair them on the **Fleet** screen (a mechanic repairs more).
 - **Road encounters** on drives: roadblocks, the Reapers' toll, breakdowns, stranded travellers, ambushes, roadside fuel. Each has choices with costs.
 
+- **The drive (3D):** pressing DRIVE puts you behind the wheel for a short stretch of road: **A/D or ←/→** steer, **W** boost, **S** brake (touch: arrow, BRAKE and BOOST buttons). Wrecks, potholes and shambling crowds are real obstacles; hitting them costs vehicle condition and your health, and you arrive at the site with whatever is left (a dead engine means walking the rest). Road events are built on the road: a **roadblock** with one gap to find, the **Reapers' toll** (pay, run the gauntlet under fire, or turn back), an **ambush** from the ditches, and a **fuel cache** to drive over. Breakdowns and stranded travellers still use the old text screen first. Without 3D the old text events are used.
+
 ## Gear, weapons, noise and the infected
 
 - **Weapons:** one ranged slot and one melee slot. Pistol, survival rifle, pump shotgun (shells), SMG, hunting rifle (pierces) and assault rifle; crowbar, bat, machete, axe. Police, the army depot and hunters' houses drop the good ones.
@@ -151,6 +153,7 @@ Needs the radio room.
 | `screens.js` | Workshop, gear and fleet screens |
 | `mission.js` | A scavenging run: weapons, noise, infected AI, hotwiring, gangs |
 | `objectives.js` | Mission objectives, hazards, vehicle condition, road encounters |
+| `drive.js` | The drivable stretch to a site (3D): road, obstacles, road events, handoff to the mission |
 | `base.js` | The base builder: camera, painting, ghost preview, the end of each night |
 | `night.js` | Raid planning, the night plan screen, attacker kinds, traps, the raid simulation |
 | `world.js` | Rooms, expeditions, outposts, offers, random events, the nightly hook |

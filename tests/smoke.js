@@ -86,6 +86,18 @@ const path = require('path');
   // ---- touch input and pointer clicks through the real UI
   await run('touch mission', () => { startNewGame(1, {}); TOUCH.on = true; const m = missionScene(TOWNS.find(t => t.kind === 'store'), 'drive'); go(m); touchPts.set(1, { x: 150, y: 450, sx: 100, sy: 450 }); touchPts.set(2, { x: 600, y: 200, sx: 600, sy: 200 }); for (let i = 0; i < 60; i++) m.update(1 / 60); m.draw(0.016, 1); touchPts.clear(); TOUCH.on = false; });
 
+  // ---- the drivable stretch on the way to a site: every road event, run to the end, hands over to the mission
+  for (const ev of ['plain', 'roadblock', 'toll', 'ambush', 'cache']) await run(`drive: ${ev}`, e => {
+    startNewGame(1, {}); save.day = 8; save.clock = 9; save.stats.trips = 5; save.res.scrap = 50; const t = TOWNS.find(t => t.type === 'town');
+    if (!R3D.ok) { startDrive(t); return true; }   // flat game: the old text events
+    go(driveScene.make(t, e === 'plain' ? null : e)); const first = scene; let draws = 0;
+    for (let i = 0; i < 60 * 80 && scene === first; i++) {
+      keys.KeyD = Math.floor(i / 50) % 4 === 0; keys.KeyA = Math.floor(i / 50) % 4 === 2;
+      if (driveScene._d().state === 'toll') { if (draws < 8) { scene.draw(.016, i / 60); draws++; } driveScene.toll(e === 'toll' ? 'pay' : 'run'); }
+      scene.update(1 / 60); if (i % 400 === 0 && draws < 8) { scene.draw(.016, i / 60); draws++; }
+    }
+    keys.KeyD = keys.KeyA = false; return scene !== first && !!scene.p;
+  }, ev);
   await run('graphics levels', () => { startNewGame(1, {}); const m = missionScene(TOWNS.find(t => t.kind === 'store'), 'drive'); go(m); for (const q of ['high', 'medium', 'low', '2d', 'auto']) { R3D.setPref(q); m.update(1 / 60); m.draw(.016, 1); baseScene.fit(); } go(baseScene); for (const q of ['low', 'high', 'auto']) { R3D.setPref(q); baseScene.draw(.016, 1); } R3D.label(); });
   await run('touch base', () => { startNewGame(1, {}); TOUCH.on = true; go(baseScene); baseScene.draw(.016, 1); touchPts.set(1, { x: 300, y: 300, sx: 300, sy: 300 }); touchPts.set(2, { x: 500, y: 300, sx: 500, sy: 300 }); baseScene.update(.05); touchPts.get(1).x = 280; touchPts.get(2).x = 540; baseScene.update(.05); touchPts.clear(); baseScene.up(); TOUCH.on = false; });
 

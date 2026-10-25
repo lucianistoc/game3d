@@ -221,7 +221,12 @@ function rollRoadEvent() {
   let x = Math.random() * tot; for (const [id, e] of pool) if ((x -= e.w) <= 0) return id; return null;
 }
 function startDrive(town) {
-  const id = rollRoadEvent(); if (!id) { go(missionScene(town, 'drive')); return; }
+  const id = rollRoadEvent();
+  if (R3D.ok && typeof driveScene !== 'undefined') {   // 3D: you drive the stretch yourself; only the events that need a decision first go through the text screen
+    if (id === 'breakdown' || id === 'stranded') { roadScene.ev = ROAD_EVENTS[id]; roadScene.town = town; roadScene.res = null; go(roadScene); return; }
+    go(driveScene.make(town, id)); return;
+  }
+  if (!id) { go(missionScene(town, 'drive')); return; }
   roadScene.ev = ROAD_EVENTS[id]; roadScene.town = town; roadScene.res = null; go(roadScene);
 }
 const roadScene = {
@@ -235,7 +240,7 @@ const roadScene = {
     if (!this.res) E.choices.forEach((c, i) => { const label = typeof c.label === 'function' ? c.label(has) : c.label; button(label, 220, 320 + i * 46, 520, 38, () => { const r = c.act(); this.res = r; save.clock += r.hours || 0; persist(); }, !c.ok || c.ok()); });
     else {
       wrapText(this.res.msg, 62).forEach((l, i) => text(l, W / 2, 330 + i * 18, 13, GREEN, 'center'));
-      button(this.res.abort ? 'BACK TO THE MAP' : 'CONTINUE', W / 2 - 80, 430, 160, 36, () => { const r = this.res; if (r.abort) go(mapScene); else go(missionScene(this.town, r.walk ? 'walk' : 'drive', { hp: r.hp })); });
+      button(this.res.abort ? 'BACK TO THE MAP' : 'CONTINUE', W / 2 - 80, 430, 160, 36, () => { const r = this.res; if (r.abort) go(mapScene); else if (R3D.ok && !r.walk && typeof driveScene !== 'undefined') go(driveScene.make(this.town, null, { hp: r.hp })); else go(missionScene(this.town, r.walk ? 'walk' : 'drive', { hp: r.hp })); });
     }
   },
 };

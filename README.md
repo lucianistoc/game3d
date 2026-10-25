@@ -33,6 +33,8 @@ Day one: open the **Map**, click a nearby settlement, **Drive** or **Walk** ther
 | **X** | leave the site | |
 | **Esc**, **M** | | menu, mute |
 
+**Frame rate:** Settings > FPS (or **F3**, or `?fps` in the address) shows frames per second, the frame time, the worst recent frame and the graphics level in the bottom-right corner.
+
 **Full screen:** the **FULLSCREEN** button on the title screen, the menu and Settings (or **Alt + Enter**) switches full screen on and off; on Android it also locks the screen to landscape. iPhone Safari has no full-screen mode for web pages, so there the button explains the way round: Share > Add to Home Screen, then start the game from its icon (the page ships a manifest and icons, so it opens without browser bars).
 
 **Touch:** in a mission, drag the left stick to move, touch anywhere else to aim and shoot, and use the buttons for HIT, THROW, USE (hold at a car), SNEAK, LEAVE and the zoom +/−. At the base, tap to build, hold and drag to paint fences and walls, and use two fingers to pinch-zoom, twist to rotate and drag to pan. On the night watch tap an attacker to shoot; THROW arms a molotov or pipe bomb for your next tap. Hold the phone sideways.

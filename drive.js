@@ -1,5 +1,5 @@
 // The drive to a site, as a short stretch you actually steer (3D only; without WebGL the old text events in objectives.js are used).
-// The road runs along -z. Wrecks, potholes and shambling crowds are real obstacles; the road events (roadblock, the Reapers' toll,
+// The road runs along -z, seen from above. Wrecks, potholes and shambling crowds are real obstacles; the road events (roadblock, the Reapers' toll,
 // an ambush, a fuel cache) are built on the road itself. Damage goes straight to the vehicle and your health, and you arrive at
 // the site with whatever is left of both. World units are metres, x across the road, y up, s = distance driven (world z = -s).
 
@@ -179,7 +179,7 @@ const driveScene = (() => {
     // trees, poles and fields: built once along the whole road and merged
     const tr = new THREE.Group(), leaf = season === 'autumn' ? ['#a8662a', '#8a4a1e', '#b08a2a'] : season === 'winter' ? ['#d8e0e0', '#c8d4d6'] : ['#2f5a2a', '#3a6a30', '#2a4e28'];
     for (let s = -40; s < L + 120; s += rr(3, 7)) for (const sd of [-1, 1]) {
-      if (Math.random() < .25) continue; const x = sd * (ROAD + rr(5, 36)), h = rr(5, 11);
+      if (Math.random() < .25) continue; const x = sd * (ROAD + rr(8, 38)), h = rr(5, 10);
       R3.mesh(R3.cyl(.25, .35, h * .4, 6), R3.mat('#4a3626'), x, h * .2, -s, tr, false);
       R3.mesh(R3.cone(h * .3, h * .85, 7), R3.mat(pickOf(leaf)), x, h * .4 + h * .42, -s, tr, false);
     }
@@ -215,17 +215,17 @@ const driveScene = (() => {
     const clk = D.clock0 + D.hours * Math.min(1, D.s / D.L), dk = darkness(clk), flash = R3.lightning(dt, wx === 'storm');
     const dusk = Math.sin(Math.min(1, dk) * Math.PI) * .45 * (dk < .98 ? 1 : 0);
     const sky = _c.set('#8fb2c8').lerp(new THREE.Color('#6f7a84'), (1 - wf) * 1.3).lerp(new THREE.Color('#02040a'), dk).lerp(new THREE.Color('#d98a5a'), dusk); if (flash) sky.lerp(new THREE.Color('#dfe8ff'), flash * .5);
-    sc.background.copy(sky); sc.fog.color.copy(sky); sc.fog.near = (90 - 40 * dk) * (wx === 'storm' ? .5 : 1); sc.fog.far = (330 - 150 * dk) * (wx === 'storm' ? .55 : wx === 'cloudy' ? .8 : 1);
+    sc.background.copy(sky); sc.fog.color.copy(sky); sc.fog.near = 120 - 20 * dk; sc.fog.far = (400 - 120 * dk) * (wx === 'storm' ? .7 : 1);
     g.hemi.color.set('#e6eefb').lerp(new THREE.Color('#4a5a96'), dk); g.hemi.groundColor.set('#6b6a5c').lerp(new THREE.Color('#05070c'), dk); g.hemi.intensity = (1.5 * wf) * (1 - dk) + .5 * dk + flash * 2.4;
     g.sun.color.set('#fff1d6').lerp(new THREE.Color('#7a92ff'), dk); g.sun.intensity = (2.1 * wf) * (1 - dk) + .4 * dk;
-    g.lights.intensity = dk > .3 ? 90 * dk : 0;
+    g.lights.intensity = dk > .3 ? 140 * dk : 0;
     // the car
     const cz = -D.s; g.car.position.set(D.x, .08, cz); g.car.rotation.y = -D.vx * .03; g.carBody.rotation.z = -D.vx * .01;
     g.carBody.position.y = Math.sin(t * 28) * .01 * Math.min(1, D.sp / 10) + (Math.abs(D.x) > ROAD + .4 ? Math.sin(t * 50) * .04 : 0);
     g.ground.position.set(D.x, 0, cz); g.road.visible = true;
     // camera: behind and above, a little further back when fast
-    const back = 8.5 + D.sp * .12, sh = D.shake * .35; cam.fov = 62 + Math.min(10, D.sp * .25);
-    cam.position.set(D.x * .75 + (Math.random() - .5) * sh, 3.7 + (Math.random() - .5) * sh * .6, cz + back); cam.lookAt(D.x * .85, 1.2, cz - 14); cam.updateProjectionMatrix();
+    const sh = D.shake * .6; cam.fov = 50 + Math.min(8, D.sp * .2); cam.up.set(0, 0, -1);   // top-down: the road runs up the screen
+    cam.position.set(D.x * .8 + (Math.random() - .5) * sh, 34, cz + 4 + D.sp * .2 + (Math.random() - .5) * sh); cam.lookAt(D.x * .8, 0, cz - 7 - D.sp * .2); cam.updateProjectionMatrix();
     // things
     for (const [o, m] of g.obs) {
       if (o.k === 'z') { m.visible = !o.dead && Math.abs(o.s - D.s) < 160; if (!m.visible) continue; m.position.set(o.x, o.fly ? o.fy : 0, -o.s); m.rotation.y = o.fly ? o.fly * 9 : Math.atan2(-(o.s - D.s), D.x - o.x); m.rotation.z = o.fly ? o.fly * 6 : 0; if (!o.fly && Math.abs(o.s - D.s) < 80) R3.pose(m, o.walk, o.kind === 'runner' ? .9 : .5, { pose: 'zombie', chase: true }); }
@@ -245,7 +245,7 @@ const driveScene = (() => {
   // ---------------------------------------------------------------- 2D overlay
   function hud() {
     drawHUD(true);
-    const near = (s, x) => { const p = R3D.toUI(x, 2.2, -s, g.camera); return p; };
+    const near = (s, x) => { const p = R3D.toUI(x, 1, -s, g.camera); return p; };
     // floating notices, anchored on the road
     for (const f of D.floats) { const p = near(f.s, f.x); if (!p) continue; ctx.globalAlpha = Math.min(1, f.l); text(f.txt, p.x, p.y - (1.6 - f.l) * 40, 14, f.col, 'center'); ctx.globalAlpha = 1; }
     // road event banner as it comes up
@@ -259,7 +259,7 @@ const driveScene = (() => {
     text(`${Math.round(D.sp * 3.6)} km/h`, 24, 76, 22, GREEN); text(`${D.VT.label.toUpperCase()}  ${vh}%`, 24, 94, 12, vh < 40 ? RED : '#9fb'); ctx.fillStyle = '#12301e'; ctx.fillRect(24, 102, 130, 6); ctx.fillStyle = vh < 40 ? RED : vh < 70 ? AMBER : GREEN; ctx.fillRect(24, 102, 130 * vh / 100, 6);
     text(`YOU ${Math.round(D.hp)}`, 24, 124, 12, D.hp < 50 ? RED : '#9fb');
     if (!TOUCH.on) text('A / D or ← → steer · W boost · S brake', W / 2, H - 14, 12, '#9fb', 'center');
-    if (D.banner && D.state === 'drive' && D.evS - D.s < 140 && D.evS - D.s > -10) { const nm = { ROADBLOCK: 'ROADBLOCK AHEAD', TOLL: 'ROADBLOCK — ARMED MEN AHEAD', AMBUSH: 'SOMETHING IS WRONG AHEAD', FUEL: 'FUEL AHEAD' }[D.banner]; ctx.globalAlpha = .6 + .4 * Math.sin(D.t * 6); text(nm, W / 2, 120, 16, D.banner === 'FUEL' ? AMBER : '#f66', 'center'); ctx.globalAlpha = 1; }
+    if (D.banner && D.state === 'drive' && D.evS - D.s < 140 && D.evS - D.s > -10) { const nm = { ROADBLOCK: 'ROADBLOCK AHEAD', TOLL: 'ROADBLOCK — ARMED MEN AHEAD', AMBUSH: 'SOMETHING IS WRONG AHEAD', FUEL: 'FUEL AHEAD' }[D.banner]; ctx.globalAlpha = .6 + .4 * Math.sin(D.t * 6); text(nm, W / 2, 134, 16, D.banner === 'FUEL' ? AMBER : '#f66', 'center'); ctx.globalAlpha = 1; }
     if (D.t < 3) { ctx.globalAlpha = Math.max(0, 1 - D.t / 3); text(D.banner ? 'Something is on the road ahead…' : 'Keep to the road.', W / 2, 150, 18, AMBER, 'center'); ctx.globalAlpha = 1; }
     if (TOUCH.on) { ctx.globalAlpha = .55; for (const [a, bx2, by2] of TB()) { ctx.strokeStyle = '#9fb'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(bx2, by2, 44, 0, 7); ctx.stroke(); text({ l: '◀', r: '▶', b: 'BRAKE', g: 'BOOST' }[a], bx2, by2 + 5, a === 'l' || a === 'r' ? 22 : 11, '#cfe', 'center'); } ctx.globalAlpha = 1; }
     if (D.state === 'toll') {
